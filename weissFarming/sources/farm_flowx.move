@@ -3,24 +3,35 @@ use sui::table::{Self, Table};
 use sui::object_table::{Self, ObjectTable};
 use sui::balance::Balance;
 use weissfarming::wf_decimal::Decimal;
-use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist};
+use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use std::type_name::{Self, TypeName};
 use sui::dynamic_object_field;
 use weissfarming::reward_pool;
+use weissfarming::constants::{VERSION};
+use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
 
+public struct RewardPoolInfo has store {
+    token_type: TypeName,
+    global_index: u256,
+    pool_id: ID,
+}
 
- public struct RewardPoolInfo has store {
-      token_type: TypeName,
-      global_index: u256,
-      pool_id: ID,
-  }
+public struct TickRewardTier has store {
+    // inclusive lower bound of the tick range (in bps)
+    lower_tick_bps: u32,
+    // exclusive upper bound of the tick range (in bps)
+    upper_tick_bps: u32,
+    // how many basis points of reward this tier grants
+    reward_multiplier_bps: u32,
+}
 
-
-public struct Farm has key {
+public struct Farm has key, store {
     id: UID,
+    version: u64,
     total_staked: u64,
     allowed_token_list: vector<TypeName>,
+    tick_reward_tiers: vector<TickRewardTier>,
     reward_pools: vector<RewardPoolInfo>,
 }
 
@@ -58,27 +69,13 @@ public struct Position has key, store {
 }
 
 
-/// Convert FlowX::I32 to signed value
-fun decode_i32(i: &I32): (bool, u64) {
-    if (i.bits <= 0x7FFFFFFF) {
-        (false, i.bits as u64)
-    } else {
-        // Compute signed value manually from two's complement
-        (true, 0x1_0000_0000 - (i.bits as u64))
-    }
 
-    /*
-        let (is_neg, val) = decode_i32(&pos.tick_lower_index);
-        if (is_neg) {
-            // Treat as -val
-        } else {
-            // Treat as +val
-        }
-    */
-}
 
 // === Admin Functions ===
-entry public fun create_reward_pool<T>(farm: &mut Farm, ctx: &mut TxContext){
+entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, ctx: &mut TxContext){
+
+    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
+
     let reward_pool = intern_create_reward_pool<T>(ctx);
     // Get the reward pool type name
     let tn = type_name::get<T>();
@@ -127,12 +124,35 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     };
     // TODO: Add position pref by position liquidity:
 
-    
+
     // Update farm total staked
     farm.total_staked = farm.total_staked + position.liquidity;
 
     // Transfer actual position embeded to the user so only him own his position
     transfer::public_transfer(holder_position, ctx.sender());
+}
+
+// === Package Functions ===
+public(package) fun intern_create_farm(ctx: &mut TxContext){
+    let new_farm = Farm {
+        id: object::new(ctx),
+        version: VERSION(),
+        total_staked: 0,
+        allowed_token_list: vector::empty(),
+        tick_reward_tiers: vector::empty(),
+        reward_pools: vector::empty(),
+    };
+
+    let admin_cap = intern_new_farm_admin(object::id(&new_farm), ctx);
+
+    transfer::public_share_object(new_farm);
+    transfer::public_transfer(admin_cap, ctx.sender());
+}
+
+entry fun migrate(admin_cap: &mut AdminCap, farm: &mut Farm) {
+    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
+    assert!(farm.version < VERSION(), ENotUpgrade());
+    farm.version = VERSION();
 }
 
 
@@ -147,4 +167,23 @@ fun vec_contains(v: &vector<RewardPoolInfo>, tn: TypeName): bool {
     i = i + 1;
   };
   false
+}
+
+/// Convert FlowX::I32 to signed value
+fun decode_i32(i: &I32): (bool, u64) {
+    if (i.bits <= 0x7FFFFFFF) {
+        (false, i.bits as u64)
+    } else {
+        // Compute signed value manually from two's complement
+        (true, 0x1_0000_0000 - (i.bits as u64))
+    }
+
+    /*
+        let (is_neg, val) = decode_i32(&pos.tick_lower_index);
+        if (is_neg) {
+            // Treat as -val
+        } else {
+            // Treat as +val
+        }
+    */
 }
