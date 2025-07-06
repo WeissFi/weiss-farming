@@ -3,24 +3,26 @@ use sui::table::{Self, Table};
 use sui::object_table::{Self, ObjectTable};
 use sui::balance::Balance;
 use weissfarming::wf_decimal::Decimal;
-use weissfarming::errors::{ENotAllowedTypeName};
+use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use std::type_name::{Self, TypeName};
 use sui::dynamic_object_field;
-use sui::transfer::public_transfer;
+
+
+ public struct RewardPoolInfo has store {
+      token_type: TypeName,
+      global_index: u256,
+      pool_id: ID,
+  }
 
 
 public struct Farm has key {
     id: UID,
     total_staked: u64,
     allowed_token_list: vector<TypeName>,
-    reward_pool_types: vector<TypeName>,
+    reward_pools: vector<RewardPoolInfo>,
 }
 
-public struct RewardPoolContainer<phantom T> has key, store {
-  id: UID,
-  pool: RewardPool<T>,
-}
 
 public struct HolderPositionCap has key, store {
     id: UID,
@@ -77,16 +79,20 @@ fun decode_i32(i: &I32): (bool, u64) {
 // === Admin Functions ===
 entry public fun create_reward_pool<T>(farm: &mut Farm, ctx: &mut TxContext){
     let reward_pool = intern_create_reward_pool<T>(ctx);
-    let container = RewardPoolContainer<T> {
-        id: object::new(ctx),
-        pool: reward_pool
-    };
-    let ty = type_name::get<T>();
-    vector::push_back(&mut farm.reward_pool_types, ty);
+    // Get the reward pool type name
+    let tn = type_name::get<T>();
+    // Assert the reward pool doesnt exist
+    assert!(!vec_contains(&farm.reward_pools, tn), ERewardPoolAlreadyExist());
     
-    dynamic_object_field::add<TypeName, RewardPoolContainer<T>>(
-        &mut farm.id, ty, container
-    );
+    // Add the reward pool to the farm
+    vector::push_back(&mut farm.reward_pools, RewardPoolInfo {
+        token_type: tn,
+        global_index: 0,
+        pool_id: object::id(&reward_pool),
+    });
+   
+    // Share the reward pool as a shared object
+    transfer::public_share_object(reward_pool);
 }
 
 // === Public Functions ===
@@ -98,6 +104,28 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     let reward_indices = table::new(ctx);
     let pending_rewards = table::new(ctx);
 
+    let i = 0;
+    // Initialize with actual global indices from reward pools
+    while (i < vector::length(&farm.reward_pool_types)) {
+  
+      
+          let token_type = *vector::borrow(&farm.reward_pool_types, i);
+            
+          // Access the reward pool container using TypeName
+          let container = dynamic_object_field::borrow<TypeName, RewardPoolContainer<token_type>>(
+              &farm.id,
+              token_type
+          );
+
+          // Get the actual current global index
+          let global_index = container.pool.global_index;
+
+          reward_indices.add(token_type, global_index);
+          pending_rewards.add(token_type, 0);
+
+          i = i + 1;
+    };
+
     let holder_position = HolderPositionCap {
         id: object::new(ctx),
         balance: position.liquidity as u256,
@@ -106,6 +134,23 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         position,
     };
 
+    // Update farm total staked
+    farm.total_staked = farm.total_staked + position.liquidity;
+
     // Transfer actual position embeded to the user so only him own his position
     transfer::public_transfer(holder_position, ctx.sender());
+}
+
+
+// === Private Functions ===
+fun vec_contains(v: &vector<RewardPoolInfo>, tn: TypeName): bool {
+  let len = vector::length(v);
+  let mut i = 0;
+  while (i < len) {
+    if (vector::borrow(v, i).token_type == tn) {
+      return true;
+    };
+    i = i + 1;
+  };
+  false
 }
