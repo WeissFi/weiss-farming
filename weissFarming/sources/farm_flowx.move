@@ -6,7 +6,8 @@ use weissfarming::wf_decimal::Decimal;
 use weissfarming::errors::{ENotAllowedTypeName};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use std::type_name::{Self, TypeName};
-
+use sui::dynamic_object_field;
+use sui::transfer::public_transfer;
 
 
 public struct Farm has key {
@@ -15,15 +16,16 @@ public struct Farm has key {
     allowed_token_list: vector<TypeName>,
     reward_pool_types: vector<TypeName>,
 }
+
 public struct RewardPoolContainer<phantom T> has key, store {
   id: UID,
   pool: RewardPool<T>,
 }
 
-public struct HolderPosition has key, store {
+public struct HolderPositionCap has key, store {
     id: UID,
     balance: u256,
-    reward_indices: Table<TypeName, Decimal>,  // Track index per reward token
+    reward_indices: Table<TypeName, u256>,  // Track index per reward token
     pending_rewards: Table<TypeName, u64>,     // Pending rewards per token
     position: Position,
 }
@@ -72,6 +74,7 @@ fun decode_i32(i: &I32): (bool, u64) {
     */
 }
 
+// === Admin Functions ===
 entry public fun create_reward_pool<T>(farm: &mut Farm, ctx: &mut TxContext){
     let reward_pool = intern_create_reward_pool<T>(ctx);
     let container = RewardPoolContainer<T> {
@@ -80,19 +83,29 @@ entry public fun create_reward_pool<T>(farm: &mut Farm, ctx: &mut TxContext){
     };
     let ty = type_name::get<T>();
     vector::push_back(&mut farm.reward_pool_types, ty);
+    
+    dynamic_object_field::add<TypeName, RewardPoolContainer<T>>(
+        &mut farm.id, ty, container
+    );
 }
 
+// === Public Functions ===
 entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut TxContext){
     // Assert position is allowed to stake
     assert!(farm.allowed_token_list.contains(&position.coin_type_x), ENotAllowedTypeName());
     assert!(farm.allowed_token_list.contains(&position.coin_type_y), ENotAllowedTypeName());
 
+    let reward_indices = table::new(ctx);
+    let pending_rewards = table::new(ctx);
+
     let holder_position = HolderPositionCap {
         id: object::new(ctx),
         balance: position.liquidity as u256,
-        reward_indices: ,
-        pending_rewards,
+        reward_indices: reward_indices,
+        pending_rewards: pending_rewards,
         position,
-    }
+    };
 
+    // Transfer actual position embeded to the user so only him own his position
+    transfer::public_transfer(holder_position, ctx.sender());
 }
