@@ -7,6 +7,7 @@ use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use std::type_name::{Self, TypeName};
 use sui::dynamic_object_field;
+use weissfarming::reward_pool;
 
 
  public struct RewardPoolInfo has store {
@@ -106,24 +107,15 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
 
     let i = 0;
     // Initialize with actual global indices from reward pools
-    while (i < vector::length(&farm.reward_pool_types)) {
-  
-      
-          let token_type = *vector::borrow(&farm.reward_pool_types, i);
-            
-          // Access the reward pool container using TypeName
-          let container = dynamic_object_field::borrow<TypeName, RewardPoolContainer<token_type>>(
-              &farm.id,
-              token_type
-          );
+    while (i < vector::length(&farm.reward_pools)) {
+        // Get the reward pool
+        let  reward_pool = vector::borrow(&farm.reward_pools, i);
+        
+        // Add to the table the tokens configs
+        reward_indices.add(reward_pool.token_type, reward_pool.global_index);
+        pending_rewards.add(reward_pool.token_type, 0);
 
-          // Get the actual current global index
-          let global_index = container.pool.global_index;
-
-          reward_indices.add(token_type, global_index);
-          pending_rewards.add(token_type, 0);
-
-          i = i + 1;
+        i = i + 1;
     };
 
     let holder_position = HolderPositionCap {
@@ -133,7 +125,9 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         pending_rewards: pending_rewards,
         position,
     };
+    // TODO: Add position pref by position liquidity:
 
+    
     // Update farm total staked
     farm.total_staked = farm.total_staked + position.liquidity;
 
