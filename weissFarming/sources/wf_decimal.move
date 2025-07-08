@@ -57,7 +57,7 @@ module weissfarming::wf_decimal {
         let divisor = pow(from(10), (18 - decimals) as u64);
         ((d.value) / divisor.value) as u64
     }
-    
+
     public fun from_native_with_decimals(value: u64, decimals: u8): Decimal {
         let multiplier = pow(from(10), (18 - decimals) as u64);
         Decimal { value: (value as u256) * multiplier.value }
@@ -197,6 +197,17 @@ module weissfarming::wf_decimal {
     public fun one(): Decimal {
         Decimal { value: WAD }
     }
+    // Convert a Q64-scaled u128 into an 18-decimal Decimal
+    public fun from_q64(v: u128): Decimal {
+        // 1) Promote to 256 bits so the multiply can’t overflow 128→256:
+        let v256: u256 = v as u256;
+        // 2) Rescale: (v * 10^18) / 2^64
+        let scaled: u256 = (v256 * WAD) / (v256 * WAD) / ((1 as u256) << 64);
+        // 3) (Optional) defensive check you didn’t exceed your U64_MAX*WAD
+        assert!(scaled <= U64_MAX * WAD, 1);
+        from_scaled_val(scaled)
+    }
+
 
 }
 

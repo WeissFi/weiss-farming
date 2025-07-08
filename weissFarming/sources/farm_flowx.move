@@ -118,7 +118,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     };
 
     // Update farm total staked
-    farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_scaled_val(position.liquidity as u256)).to_scaled_val();
+    farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_q64(position.liquidity)).to_scaled_val();
 
     let holder_position = HolderPositionCap {
         id: object::new(ctx),
