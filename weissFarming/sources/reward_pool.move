@@ -8,15 +8,18 @@ use sui::coin::{Self, Coin};
 
 public struct RewardPool<phantom T> has key, store {
     id: UID,
+    farm_id: ID,
     total_balance: Balance<T>,
-    yield_gain_pending: u256
+    yield_gain_pending: u256,
+
 }
 
 // === Package Functions ===
-public(package) fun intern_create_reward_pool<T>(ctx: &mut TxContext): RewardPool<T> {
+public(package) fun intern_create_reward_pool<T>(farm_id: ID, ctx: &mut TxContext): RewardPool<T> {
     // Create the treasury shared object
     let reward_pool = RewardPool<T> {
         id: object::new(ctx),
+        farm_id,
         total_balance: balance::zero(),
         yield_gain_pending: 0
     };
@@ -58,3 +61,8 @@ public fun get_yield_gain_pending<T>(reward_pool: &RewardPool<T>): u256 {
     // Get the balance from the reward_pool
     reward_pool.yield_gain_pending
 }
+public fun get_farm_id<T>(reward_pool: &RewardPool<T>): ID {
+    // Get the balance from the reward_pool
+    reward_pool.farm_id
+}
+

@@ -1,13 +1,14 @@
 module weissfarming::farm_flowx;
 use sui::table::{Self, Table};
 use weissfarming::wf_decimal::{Self};
-use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool};
+use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use std::type_name::{Self, TypeName};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
 use sui::coin::{Coin};
+use weissfarming::wf_decimal::from_scaled_val;
 
 public struct RewardPoolInfo has store {
     token_type: TypeName,
@@ -70,10 +71,10 @@ public struct Position has key, store {
 
 // === Admin Functions ===
 entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, decimals: u8, ctx: &mut TxContext){
-
+    assert!(farm.version == VERSION(), EPackageVersionError());
     assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
 
-    let reward_pool = intern_create_reward_pool<T>(ctx);
+    let reward_pool = intern_create_reward_pool<T>(object::id(farm), ctx);
     // Get the reward pool type name
     let tn = type_name::get<T>();
     // Assert the reward pool doesnt exist
@@ -93,6 +94,7 @@ entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, de
 
 // === Public Functions ===
 entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut TxContext){
+    assert!(farm.version == VERSION(), EPackageVersionError());
     // Assert position is allowed to stake
     assert!(farm.allowed_token_list.contains(&position.coin_type_x), ENotAllowedTypeName());
     assert!(farm.allowed_token_list.contains(&position.coin_type_y), ENotAllowedTypeName());
@@ -116,7 +118,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     };
 
     // Update farm total staked
-    farm.total_staked = farm.total_staked + (position.liquidity as u256);
+    farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_scaled_val(position.liquidity as u256)).to_scaled_val();
 
     let holder_position = HolderPositionCap {
         id: object::new(ctx),
@@ -131,7 +133,8 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
 }
 
 entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: &mut Farm, ctx: &mut TxContext){
-    
+    assert!(farm.version == VERSION(), EPackageVersionError());
+    assert!(holder_position_cap.farm_id == object::id(farm), EInvalidHolderPositionCap());
     // Destructure the HolderPositionCap
     let HolderPositionCap {
         id,
@@ -159,7 +162,7 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
     };
 
     // Update farm total staked (subtract the position's liquidity)
-    farm.total_staked = farm.total_staked - balance;
+    farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).sub(wf_decimal::from_scaled_val(balance)).to_scaled_val();
     // Drop the wallet
     table::drop(reward_info);
     // Delete the wrapper object
@@ -170,13 +173,16 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
 }
 
 entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, reward_pool: &mut RewardPool<T>, farm: &mut Farm, ctx: &mut TxContext){
+    assert!(farm.version == VERSION(), EPackageVersionError());
+    assert!(holder_position_cap.farm_id == object::id(farm), EInvalidHolderPositionCap());
+    assert!(reward_pool::get_farm_id(reward_pool) == object::id(farm), EInvalidRewardPool());
 
     let mut i = 0;
     // Update the reward index
     while (i < vector::length(&farm.reward_pools)) {
         // Get the reward pool
         let reward_pool_info = vector::borrow_mut(&mut farm.reward_pools, i);
-
+  
         // Only process the matching token type
         if (reward_pool_info.token_type == type_name::get<T>()) {
             let user_reward_info = table::borrow_mut(&mut holder_position_cap.reward_info, type_name::get<T>());
@@ -205,7 +211,9 @@ entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, r
 }
 
 entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPool<T>, farm: &mut Farm){
-
+    assert!(farm.version == VERSION(), EPackageVersionError());
+    assert!(reward_pool::get_farm_id(reward_pool) == object::id(farm), EInvalidRewardPool());
+    
     let mut i = 0;
     // Update the reward index
     while (i < vector::length(&farm.reward_pools)) {
