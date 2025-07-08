@@ -8,9 +8,8 @@ use sui::coin::{Self, Coin};
 
 public struct RewardPool<phantom T> has key, store {
     id: UID,
-    global_index: u256,
     total_balance: Balance<T>,
-    prev_reward_balance: u256,
+    yield_gain_pending: u256
 }
 
 // === Package Functions ===
@@ -18,9 +17,8 @@ public(package) fun intern_create_reward_pool<T>(ctx: &mut TxContext): RewardPoo
     // Create the treasury shared object
     let reward_pool = RewardPool<T> {
         id: object::new(ctx),
-        global_index: 0,
         total_balance: balance::zero(),
-        prev_reward_balance: 0,
+        yield_gain_pending: 0
     };
     
     // Emit creation of a reward pool event
@@ -36,8 +34,27 @@ public(package) fun intern_add_balance<T>(coin: Coin<T>, reward_pool: &mut Rewar
     reward_pool.total_balance.join(balance);
 }
 
-public(package) fun intern_get_balance<T>(amount: u64, reward_pool: &mut RewardPool<T>): Balance<T> {
+public(package) fun intern_withdraw_balance<T>(amount: u64, reward_pool: &mut RewardPool<T>): Balance<T> {
     // Get the balance from the reward_pool
     let balance = reward_pool.total_balance.split(amount);
     balance
+}
+
+public(package) fun intern_add_yield_gain_pending<T>(amount: u256, reward_pool: &mut RewardPool<T>) {
+    // Get the balance from the reward_pool
+    reward_pool.yield_gain_pending = reward_pool.yield_gain_pending + amount;
+}
+public(package) fun intern_reset_yield_gain_pending<T>(reward_pool: &mut RewardPool<T>) {
+    // Get the balance from the reward_pool
+    reward_pool.yield_gain_pending = 0;
+}
+
+public fun get_balance<T>(reward_pool: &RewardPool<T>): u64 {
+    // Get the balance from the reward_pool
+    reward_pool.total_balance.value()
+}
+
+public fun get_yield_gain_pending<T>(reward_pool: &RewardPool<T>): u256 {
+    // Get the balance from the reward_pool
+    reward_pool.yield_gain_pending
 }
