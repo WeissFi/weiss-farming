@@ -99,19 +99,16 @@ distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPool<T>, farm: &mut
 
 ### Building
 ```bash
-cd weissFarming
 sui move build
 ```
 
 ### Testing
 ```bash
-cd weissFarming
 sui move test
 ```
 
 ### Deployment
 ```bash
-cd weissFarming
 sui client publish --gas-budget 100000000
 ```
 
@@ -152,24 +149,6 @@ The protocol integrates with FlowX CLMM positions:
 - Any Sui coin type can be used as rewards
 - Configurable decimal precision per token
 - Support for multiple reward tokens per farm
-
-## 📁 Project Structure
-
-```
-weiss-farming/
-├── README.md                    # This file
-└── weissFarming/               # Move package
-    ├── Move.toml               # Package configuration
-    ├── sources/                # Smart contract source code
-    │   ├── farm_flowx.move     # Main farming contract
-    │   ├── reward_pool.move    # Reward pool management
-    │   ├── wf_decimal.move     # Decimal math library
-    │   ├── farm_admin.move     # Admin capabilities
-    │   ├── constants.move      # Protocol constants
-    │   └── errors.move         # Error definitions
-    └── tests/                  # Test files
-        └── weissfarming_tests.move
-```
 
 ## 📄 License
 
