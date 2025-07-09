@@ -1,29 +1,28 @@
 module weissfarming::farm_flowx;
-use sui::table::{Self, Table};
-use weissfarming::wf_decimal::{Self};
+
+// === Imports ===
+use weissfarming::wf_decimal;
 use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
-use std::type_name::{Self, TypeName};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
-use sui::coin::{Coin};
-use sui::display::{Self, Display};
-use sui::package::{Publisher};
 
-// TODO: Add Display for the farmPosition
+use sui::coin::{Coin};
+use sui::display;
+use sui::package::{Publisher};
+use sui::table::{Self, Table};
+
+use std::type_name::{Self, TypeName};
+
+
+// === Structs ===
 public struct RewardPoolInfo has store {
     token_type: TypeName,
     global_index: u256,
     pool_id: ID,
     decimals: u8
 }
-
-// public struct TickRewardTier has store {
-//     lower_tick_normalized: u64,
-//     upper_tick_normalized: u64,
-//     reward_multiplier_bps: u32,
-// }
 
 public struct Farm has key, store {
     id: UID,
@@ -68,30 +67,6 @@ public struct Position has key, store {
 	coins_owed_x: u64,
 	coins_owed_y: u64,
 	reward_infos: vector<PositionRewardInfo>
-}
-
-
-// === Admin Functions ===
-entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, decimals: u8, ctx: &mut TxContext){
-    assert!(farm.version == VERSION(), EPackageVersionError());
-    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
-
-    let reward_pool = intern_create_reward_pool<T>(object::id(farm), ctx);
-    // Get the reward pool type name
-    let tn = type_name::get<T>();
-    // Assert the reward pool doesnt exist
-    assert!(!vec_contains(&farm.reward_pools, tn), ERewardPoolAlreadyExist());
-    
-    // Add the reward pool to the farm
-    vector::push_back(&mut farm.reward_pools, RewardPoolInfo {
-        token_type: tn,
-        global_index: 0,
-        pool_id: object::id(&reward_pool),
-        decimals
-    });
-   
-    // Share the reward pool as a shared object
-    transfer::public_share_object(reward_pool);
 }
 
 // === Public Functions ===
@@ -197,7 +172,7 @@ entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, r
                 ),
                 wf_decimal::from_scaled_val(holder_position_cap.balance)
             );
-            let rewards_to_u64 = rewards.to_native_with_decimals(reward_pool_info.decimals);
+            let rewards_to_u64 = rewards.to_native_token(reward_pool_info.decimals);
 
             let reward_coin = reward_pool::intern_withdraw_balance<T>(rewards_to_u64, reward_pool);
             // Update the user reward index
@@ -228,14 +203,14 @@ entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPo
             if (farm.total_staked == 0) {
                 // No stakers, just add to pool without updating index
                 // Rewards will be distributed when users start staking
-                reward_pool::intern_add_yield_gain_pending(wf_decimal::from_native_with_decimals(coin.value(), reward_pool_info.decimals).to_scaled_val(), reward_pool);
+                reward_pool::intern_add_yield_gain_pending(wf_decimal::from_native_token(coin.value(), reward_pool_info.decimals).to_scaled_val(), reward_pool);
                 reward_pool::intern_add_balance(coin, reward_pool);
                 return
             };
 
             let new_global_index = wf_decimal::from_scaled_val(reward_pool_info.global_index).add(
                 wf_decimal::add(
-                    wf_decimal::from_native_with_decimals(coin.value(), reward_pool_info.decimals), 
+                    wf_decimal::from_native_token(coin.value(), reward_pool_info.decimals), 
                     wf_decimal::from_scaled_val(reward_pool::get_yield_gain_pending(reward_pool))
                 ).div(wf_decimal::from_scaled_val(farm.total_staked))
             );
@@ -250,6 +225,30 @@ entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPo
     // Add the coin balance to it's current reward pool
     reward_pool::intern_add_balance(coin, reward_pool);
 }   
+
+
+// === Admin Functions ===
+entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, decimals: u8, ctx: &mut TxContext){
+    assert!(farm.version == VERSION(), EPackageVersionError());
+    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
+
+    let reward_pool = intern_create_reward_pool<T>(object::id(farm), ctx);
+    // Get the reward pool type name
+    let tn = type_name::get<T>();
+    // Assert the reward pool doesnt exist
+    assert!(!vec_contains(&farm.reward_pools, tn), ERewardPoolAlreadyExist());
+    
+    // Add the reward pool to the farm
+    vector::push_back(&mut farm.reward_pools, RewardPoolInfo {
+        token_type: tn,
+        global_index: 0,
+        pool_id: object::id(&reward_pool),
+        decimals
+    });
+   
+    // Share the reward pool as a shared object
+    transfer::public_share_object(reward_pool);
+}
 
 entry public fun init_holder_position_cap_display(admin_cap: &AdminCap, farm: &Farm, publisher: Publisher, ctx: &mut TxContext){
     assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
@@ -288,8 +287,13 @@ entry public fun init_holder_position_cap_display(admin_cap: &AdminCap, farm: &F
     transfer::public_transfer(publisher, ctx.sender());
     transfer::public_transfer(disp, ctx.sender());
 }
+entry fun migrate(admin_cap: &AdminCap, farm: &mut Farm) {
+    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
+    assert!(farm.version < VERSION(), ENotUpgrade());
+    farm.version = VERSION();
+}
 
-
+// === Private Functions ===
 fun init(ctx: &mut TxContext){
     let new_farm = Farm {
         id: object::new(ctx),
@@ -306,14 +310,6 @@ fun init(ctx: &mut TxContext){
     transfer::public_transfer(admin_cap, ctx.sender());
 }
 
-entry fun migrate(admin_cap: &AdminCap, farm: &mut Farm) {
-    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
-    assert!(farm.version < VERSION(), ENotUpgrade());
-    farm.version = VERSION();
-}
-
-
-// === Private Functions ===
 fun vec_contains(v: &vector<RewardPoolInfo>, tn: TypeName): bool {
   let len = vector::length(v);
   let mut i = 0;

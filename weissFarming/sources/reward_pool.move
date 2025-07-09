@@ -1,17 +1,15 @@
 module weissfarming::reward_pool;
-use sui::table::{Self, Table};
+
+// === Imports ===
 use sui::balance::{Self, Balance};
-use weissfarming::wf_decimal::Decimal;
-use weissfarming::errors::{ENotAllowedTypeName};
-use std::type_name::TypeName;
 use sui::coin::{Self, Coin};
 
+// === Structs ===
 public struct RewardPool<phantom T> has key, store {
     id: UID,
     farm_id: ID,
     total_balance: Balance<T>,
     yield_gain_pending: u256,
-
 }
 
 // === Package Functions ===
@@ -52,6 +50,7 @@ public(package) fun intern_reset_yield_gain_pending<T>(reward_pool: &mut RewardP
     reward_pool.yield_gain_pending = 0;
 }
 
+// === View Functions ===
 public fun get_balance<T>(reward_pool: &RewardPool<T>): u64 {
     // Get the balance from the reward_pool
     reward_pool.total_balance.value()

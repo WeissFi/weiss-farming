@@ -53,16 +53,16 @@ module weissfarming::wf_decimal {
         ((d.value) / MIST) as u64
     }
  
-    public fun to_native_with_decimals(d: Decimal, decimals: u8): u64 {
+    public fun to_native_token(d: Decimal, decimals: u8): u64 {
         let divisor = pow(from(10), (18 - decimals) as u64);
         ((d.value) / divisor.value) as u64
     }
 
-    public fun from_native_with_decimals(value: u64, decimals: u8): Decimal {
+    public fun from_native_token(value: u64, decimals: u8): Decimal {
         let multiplier = pow(from(10), (18 - decimals) as u64);
         Decimal { value: (value as u256) * multiplier.value }
     }
-
+ 
     public fun from_native_sui(v: u64): Decimal {
         // v is in Mist (9 decimals); to upscale to 18 decimals multiply by 1e9.
         Decimal { value: (v as u256) * MIST }

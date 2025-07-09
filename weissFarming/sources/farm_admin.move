@@ -1,12 +1,12 @@
 module weissfarming::farm_admin;
 
-
+// === Structs ===
 public struct AdminCap has key, store {
     id: UID,
     farm_id: ID
 }
 
-// === Private Functions ===
+// === Package Functions ===
 public(package) fun intern_new_farm_admin(farm_id: ID, ctx: &mut TxContext): AdminCap {
     let admin_cap = AdminCap {
         id: object::new(ctx),
