@@ -2,16 +2,17 @@ module weissfarming::farm_flowx;
 
 // === Imports ===
 use weissfarming::wf_decimal;
-use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap};
+use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, EInvalidPositionSource};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
-use weissfarming::constants::{VERSION};
+use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
 
 use sui::coin::{Coin};
 use sui::display;
 use sui::package::{Publisher};
 use sui::table::{Self, Table};
+use sui::address;
 
 use std::type_name::{Self, TypeName};
 
@@ -72,6 +73,13 @@ public struct Position has key, store {
 // === Public Functions ===
 entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut TxContext){
     assert!(farm.version == VERSION(), EPackageVersionError());
+    
+    // Verify the Position comes from FlowX v3 package
+    let position_type = type_name::get<Position>();
+    let address_string = position_type.get_address();
+    let position_addr = address::from_ascii_bytes(address_string.as_bytes());
+    assert!(position_addr == FLOWX_V3_ADDRESS(), EInvalidPositionSource());
+    
     // Assert position is allowed to stake
     assert!(farm.allowed_token_list.contains(&position.coin_type_x), ENotAllowedTypeName());
     assert!(farm.allowed_token_list.contains(&position.coin_type_y), ENotAllowedTypeName());
