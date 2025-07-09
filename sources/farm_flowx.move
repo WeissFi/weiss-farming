@@ -35,8 +35,7 @@ public struct Farm has key, store {
 }
 
 public struct UserRewardInfo has store, drop {
-    user_index: u256,
-    pending_rewards: u64,
+    user_index: u256
 }
 public struct HolderPositionCap has key, store {
     id: UID,
@@ -95,8 +94,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         // Add to the table the tokens configs
         reward_info.add(reward_pool.token_type, 
         UserRewardInfo { 
-            user_index: reward_pool.global_index, 
-            pending_rewards: 0 }
+            user_index: reward_pool.global_index,  }
         );
 
         i = i + 1;
