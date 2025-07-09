@@ -202,7 +202,7 @@ module weissfarming::wf_decimal {
         // 1) Promote to 256 bits so the multiply can’t overflow 128→256:
         let v256: u256 = v as u256;
         // 2) Rescale: (v * 10^18) / 2^64
-        let scaled: u256 = (v256 * WAD) / (v256 * WAD) / ((1 as u256) << 64);
+        let scaled: u256 = (v256 * WAD) / ((1 as u256) << 64);
         // 3) (Optional) defensive check you didn’t exceed your U64_MAX*WAD
         assert!(scaled <= U64_MAX * WAD, 1);
         from_scaled_val(scaled)
@@ -210,6 +210,7 @@ module weissfarming::wf_decimal {
 
 
 }
+
 
 
 // === Test Functions ===

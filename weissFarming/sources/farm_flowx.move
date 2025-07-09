@@ -8,8 +8,10 @@ use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
 use sui::coin::{Coin};
-use weissfarming::wf_decimal::from_scaled_val;
+use sui::display::{Self, Display};
+use sui::package::{Publisher};
 
+// TODO: Add Display for the farmPosition
 public struct RewardPoolInfo has store {
     token_type: TypeName,
     global_index: u256,
@@ -123,7 +125,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     let holder_position = HolderPositionCap {
         id: object::new(ctx),
         farm_id: object::id(farm),
-        balance: position.liquidity as u256,
+        balance: wf_decimal::from_q64(position.liquidity).to_scaled_val(),
         reward_info,
         position,
     };
@@ -249,6 +251,44 @@ entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPo
     reward_pool::intern_add_balance(coin, reward_pool);
 }   
 
+entry public fun init_holder_position_cap_display(admin_cap: &AdminCap, farm: &Farm, publisher: Publisher, ctx: &mut TxContext){
+    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
+    // Define Display keys + template strings
+    let keys = vector[
+        b"name".to_string(),
+        b"link".to_string(),
+        b"image_url".to_string(),
+        b"thumbnail_url".to_string(),
+        b"description".to_string(),
+        b"project_url".to_string(),
+        b"creator".to_string(),
+    ];
+
+    let values = vector[
+        b"WeissFi Farming Liquidity Position".to_string(),
+        // For `link` one can build a URL using an `id` property
+        b"https://yields.finance/flp/{id}".to_string(),
+        // `image_url` use an IPFS template
+        b"https://weissfi.s3.eu-west-3.amazonaws.com/sui-vault-512x512.png".to_string(), // 512x512 ratio 1:1 svg under 1mb
+        // `thumbnail_url` use an IPFS template
+        b"https://weissfi.s3.eu-west-3.amazonaws.com/sui-vault-256x256.png".to_string(), // 256 × 256 px or 128 × 128 px svg under 100kb
+        // Description is static for all `HolderPositionCap` objects.
+        b"This NFT represents your staked FlowX liquidity position in WeissFi farming protocol. Use this to claim accumulated rewards, unstake your position, or transfer your farming rights to another address.".to_string(),
+        // Project URL is usually static
+        b"https://weiss.finance".to_string(),
+        // Creator field Weiss Finance
+        b"Weiss Finance".to_string(),
+    ];
+
+
+    // Create + publish the Display<HolderPositionCap>
+    let mut disp = display::new_with_fields<HolderPositionCap>(&publisher, keys, values, ctx);
+    disp.update_version();
+    // Return publisher & display back to you
+    transfer::public_transfer(publisher, ctx.sender());
+    transfer::public_transfer(disp, ctx.sender());
+}
+
 
 fun init(ctx: &mut TxContext){
     let new_farm = Farm {
@@ -286,40 +326,4 @@ fun vec_contains(v: &vector<RewardPoolInfo>, tn: TypeName): bool {
   false
 }
 
-// Convert FlowX::I32 to signed value
-// fun decode_i32(i: &I32): (bool, u64) {
-//     if (i.bits <= 0x7FFFFFFF) {
-//         (false, i.bits as u64)
-//     } else {
-//         // Compute signed value manually from two's complement
-//         (true, 0x1_0000_0000 - (i.bits as u64))
-//     }
 
-//     /*
-//         let (is_neg, val) = decode_i32(&pos.tick_lower_index);
-//         if (is_neg) {
-//             // Treat as -val
-//         } else {
-//             // Treat as +val
-//         }
-//     */
-// }
-
-// fun normalize_tick(tick: I32): u64 {
-//     let (is_neg, val) = decode_i32(&tick);
-//     if (is_neg) {
-//         // Map negative values to 0..0x80000000
-//         0x80000000 - val
-//     } else {
-//         // Map positive values to 0x80000000..0x100000000
-//         0x80000000 + val
-//     }
-// }
-// fun position_matches_tier(position: &Position, tier: &TickRewardTier): bool {
-//       let pos_lower_norm = normalize_tick(position.tick_lower_index);
-//       let pos_upper_norm = normalize_tick(position.tick_upper_index);
-
-//       // Simple unsigned comparison
-//       pos_lower_norm >= tier.lower_tick_normalized &&
-//       pos_upper_norm <= tier.upper_tick_normalized
-//   }
