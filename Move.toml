@@ -1,8 +1,12 @@
 [package]
 name = "weissFarming"
+version = "1.0.0"
 edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
-# license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
-# authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
+license = "Proprietary"
+authors = ["WeissFi (contact@weiss.finance)"]
+description = "WeissFi Farming Protocol - Secure liquidity farming for FlowX CLMM positions on Sui"
+repository = "https://github.com/weissfi/weiss-farming"
+homepage = "https://weiss.finance"
 
 [dependencies]
 
