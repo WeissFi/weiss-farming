@@ -1,9 +1,9 @@
 [package]
 name = "weissFarming"
-version = "1.0.0"
+version = "0.0.1"
 edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
 license = "Proprietary"
-authors = ["WeissFi (contact@weiss.finance)"]
+authors = ["@0xantman (contact@weiss.finance)"]
 description = "WeissFi Farming Protocol - Secure liquidity farming for FlowX CLMM positions on Sui"
 repository = "https://github.com/weissfi/weiss-farming"
 homepage = "https://weiss.finance"
@@ -38,3 +38,8 @@ weissfarming = "0x0"
 # and `--dev` modes.
 # alice = "0xB0B"
 
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "framework/mainnet"
+override = true
