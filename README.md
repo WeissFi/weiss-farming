@@ -152,14 +152,23 @@ The protocol integrates with FlowX CLMM positions:
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+This project is proprietary software owned by WeissFi. All rights reserved.
+
+**⚠️ IMPORTANT:** This software is protected by copyright and proprietary license. 
+You may not use, modify, distribute, or create derivative works without explicit 
+written permission from WeissFi.
+
+For licensing inquiries, please contact: [contact@weiss.finance]
+
+See the [LICENSE](LICENSE) file for complete terms and conditions.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Run security audits on changes
-4. Submit a pull request
+This is proprietary software. External contributions are not accepted without 
+prior written agreement. 
+
+For partnership or collaboration inquiries, please contact WeissFi at:
+[contact@weiss.finance]
 
 ## ⚠️ Disclaimer
 
