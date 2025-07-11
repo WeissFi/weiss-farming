@@ -7,7 +7,7 @@ use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
-
+use weissfarming::events_v1::{emit_new_stake_position_event, emit_unstake_position_event, emit_claim_reward_event, emit_distribute_reward_event, emit_new_reward_pool_created_event};
 use sui::coin::{Coin};
 use sui::display;
 use sui::package::{Publisher};
@@ -100,7 +100,12 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
 
         i = i + 1;
     };
-
+    // Emit new stake position
+    emit_new_stake_position_event(
+        object::id(farm),
+        wf_decimal::from_q64(position.liquidity).to_scaled_val(),
+    );
+  
     // Update farm total staked
     farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_q64(position.liquidity)).to_scaled_val();
 
@@ -111,7 +116,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         reward_info,
         position,
     };
-  
+
     // Transfer actual position embeded to the user so only him own his position
     transfer::public_transfer(holder_position, ctx.sender());
 }
@@ -145,6 +150,11 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
         i = i + 1;
     };
 
+    emit_unstake_position_event(
+        object::id(farm),
+        wf_decimal::from_q64(position.liquidity).to_scaled_val()
+    );
+
     // Update farm total staked (subtract the position's liquidity)
     farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).sub(wf_decimal::from_scaled_val(balance)).to_scaled_val();
     // Drop the wallet
@@ -158,8 +168,9 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
 
 entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, reward_pool: &mut RewardPool<T>, farm: &mut Farm, ctx: &mut TxContext){
     assert!(farm.version == VERSION(), EPackageVersionError());
-    assert!(holder_position_cap.farm_id == object::id(farm), EInvalidHolderPositionCap());
-    assert!(reward_pool::get_farm_id(reward_pool) == object::id(farm), EInvalidRewardPool());
+    let farm_id= object::id(farm);
+    assert!(holder_position_cap.farm_id == farm_id, EInvalidHolderPositionCap());
+    assert!(reward_pool::get_farm_id(reward_pool) == farm_id, EInvalidRewardPool());
 
     let mut i = 0;
     // Update the reward index
@@ -182,22 +193,29 @@ entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, r
             let rewards_to_u64 = rewards.to_native_token(reward_pool_info.decimals);
 
             let reward_coin = reward_pool::intern_withdraw_balance<T>(rewards_to_u64, reward_pool);
+            // Emit claim reward event
+            emit_claim_reward_event(
+                farm_id, 
+                reward_coin.value(),
+                type_name::get<T>().into_string()
+            );
             // Update the user reward index
             user_reward_info.user_index = reward_pool_info.global_index;
             // Let the user claim his rewards
             transfer::public_transfer(reward_coin.into_coin(ctx), ctx.sender());
-
+            
             break
         };
        
         i = i + 1;
     };
+   
 }
 
 entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPool<T>, farm: &mut Farm){
     assert!(farm.version == VERSION(), EPackageVersionError());
     assert!(reward_pool::get_farm_id(reward_pool) == object::id(farm), EInvalidRewardPool());
-    
+
     let mut i = 0;
     // Update the reward index
     while (i < vector::length(&farm.reward_pools)) {
@@ -211,25 +229,28 @@ entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPo
                 // No stakers, just add to pool without updating index
                 // Rewards will be distributed when users start staking
                 reward_pool::intern_add_yield_gain_pending(wf_decimal::from_native_token(coin.value(), reward_pool_info.decimals).to_scaled_val(), reward_pool);
-                reward_pool::intern_add_balance(coin, reward_pool);
-                return
+            } else {
+                // Calculate new global index for active stakers
+                let new_global_index = wf_decimal::from_scaled_val(reward_pool_info.global_index).add(
+                    wf_decimal::add(
+                        wf_decimal::from_native_token(coin.value(), reward_pool_info.decimals), 
+                        wf_decimal::from_scaled_val(reward_pool::get_yield_gain_pending(reward_pool))
+                    ).div(wf_decimal::from_scaled_val(farm.total_staked))
+                );
+                reward_pool::intern_reset_yield_gain_pending(reward_pool);
+                // Update the global index of the reward pool
+                reward_pool_info.global_index = new_global_index.to_scaled_val();
             };
-
-            let new_global_index = wf_decimal::from_scaled_val(reward_pool_info.global_index).add(
-                wf_decimal::add(
-                    wf_decimal::from_native_token(coin.value(), reward_pool_info.decimals), 
-                    wf_decimal::from_scaled_val(reward_pool::get_yield_gain_pending(reward_pool))
-                ).div(wf_decimal::from_scaled_val(farm.total_staked))
-            );
-            reward_pool::intern_reset_yield_gain_pending(reward_pool);
-            // Update the global index of the reward pool
-            reward_pool_info.global_index = new_global_index.to_scaled_val();
+    
+            break
         };
         
         i = i + 1;
     };
-
-    // Add the coin balance to it's current reward pool
+    // Emit reward distribution event
+    emit_distribute_reward_event(object::id(farm), coin.value(), type_name::get<T>().into_string());
+    
+    // Add the coin balance to the reward pool
     reward_pool::intern_add_balance(coin, reward_pool);
 }   
 
@@ -252,6 +273,12 @@ entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, de
         pool_id: object::id(&reward_pool),
         decimals
     });
+
+    emit_new_reward_pool_created_event(
+        object::id(farm),
+        object::id(&reward_pool), 
+        type_name::get<T>().into_string()
+    );
    
     // Share the reward pool as a shared object
     transfer::public_share_object(reward_pool);
@@ -706,6 +733,8 @@ fun test_multiple_stakers_reward_distribution(){
     scenario.next_tx(ADMIN);
     let mut reward_pool_flx = scenario.take_shared<RewardPool<TEST_FLX>>();
     {
+        let sum_deposit = wf_decimal::from_q64(6559457486451).add(wf_decimal::from_q64(6559457486451));
+        assert_eq!(farm.total_staked, sum_deposit.to_scaled_val());
         let first_reward = coin::mint_for_testing<TEST_FLX>(2_000_000_000_000, scenario.ctx());
         distribute_rewards<TEST_FLX>(first_reward, &mut reward_pool_flx, &mut farm);
     };
