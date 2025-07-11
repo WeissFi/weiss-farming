@@ -29,9 +29,10 @@ public struct Farm has key, store {
     id: UID,
     version: u64,
     total_staked: u256,
-    allowed_token_list: vector<TypeName>,
+    allowed_position_token_list: vector<TypeName>,
     // tick_reward_tiers: vector<TickRewardTier>,
     reward_pools: vector<RewardPoolInfo>,
+    flowx_v3_address: address,
 }
 
 public struct UserRewardInfo has store, drop {
@@ -77,11 +78,11 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     let position_type = type_name::get<Position>();
     let address_string = position_type.get_address();
     let position_addr = address::from_ascii_bytes(address_string.as_bytes());
-    assert!(position_addr == FLOWX_V3_ADDRESS(), EInvalidPositionSource());
+    assert!(position_addr == farm.flowx_v3_address, EInvalidPositionSource());
     
     // Assert position is allowed to stake
-    assert!(farm.allowed_token_list.contains(&position.coin_type_x), ENotAllowedTypeName());
-    assert!(farm.allowed_token_list.contains(&position.coin_type_y), ENotAllowedTypeName());
+    assert!(farm.allowed_position_token_list.contains(&position.coin_type_x), ENotAllowedTypeName());
+    assert!(farm.allowed_position_token_list.contains(&position.coin_type_y), ENotAllowedTypeName());
 
     let mut reward_info = table::new(ctx);
 
@@ -299,15 +300,26 @@ entry fun migrate(admin_cap: &AdminCap, farm: &mut Farm) {
     farm.version = VERSION();
 }
 
+entry public fun initialize_allowed_tokens<T>(admin_cap: &AdminCap, farm: &mut Farm) {
+    assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
+    assert!(farm.version == VERSION(), EPackageVersionError());
+    // Add token type
+    let type_name = type_name::get<T>();
+    if (!farm.allowed_position_token_list.contains(&type_name)) {
+        vector::push_back(&mut farm.allowed_position_token_list, type_name);
+    };
+}
+
 // === Private Functions ===
 fun init(ctx: &mut TxContext){
     let new_farm = Farm {
         id: object::new(ctx),
         version: VERSION(),
         total_staked: 0,
-        allowed_token_list: vector::empty(),
+        allowed_position_token_list: vector::empty(),
         // tick_reward_tiers: vector::empty(),
         reward_pools: vector::empty(),
+        flowx_v3_address: FLOWX_V3_ADDRESS(),
     };
 
     let admin_cap = intern_new_farm_admin(object::id(&new_farm), ctx);
@@ -329,3 +341,496 @@ fun vec_contains(v: &vector<RewardPoolInfo>, tn: TypeName): bool {
 }
 
 
+
+#[test_only]
+use sui::coin;
+#[test_only]
+use sui::sui::SUI;
+#[test_only]
+const ADMIN: address = @0xCAFE;
+#[test_only]
+const BOB: address = @0xB;
+#[test_only]
+const ALICE: address = @0xA;
+#[test_only]
+const CHARLIE: address = @0xC;
+#[test_only]
+use sui::test_scenario::{Self, Scenario};
+#[test_only]
+use std::unit_test::assert_eq;
+#[test_only]
+use std::debug::print;
+
+// Test token types representing DORI and USDC
+#[test_only]
+public struct TEST_DORI has drop {}
+#[test_only]
+public struct TEST_USDC has drop {}
+#[test_only]
+public struct TEST_FLX has drop {}
+
+
+#[test_only]
+public struct TEST_FAKE has drop {}
+
+#[test_only]
+public fun init_flowx_position(scenario: &mut Scenario): Position {
+    // Create a position that mimics FlowX v3 structure
+    // Note: This creates a position with our module's address, not FlowX's
+    // For real testing, you need to use actual FlowX positions on testnet
+    
+    let flowx_position = Position {
+        id: object::new(scenario.ctx()),
+        pool_id: object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b),
+        fee_rate: 100,
+        coin_type_x: type_name::get<TEST_DORI>(),
+        coin_type_y: type_name::get<TEST_USDC>(),
+        tick_lower_index: I32 { bits: 4294897702 },
+        tick_upper_index: I32 { bits: 4294898702 },
+        liquidity: 6559457486451,
+        fee_growth_inside_x_last: 4212516769486,
+        fee_growth_inside_y_last: 12990396982,
+        coins_owed_x: 1497626,
+        coins_owed_y: 4619,
+        reward_infos: vector::empty(),
+    };
+    flowx_position
+}
+
+#[test_only]
+public fun init_package(scenario: &mut Scenario) {
+    
+    let new_farm = Farm {
+        id: object::new(scenario.ctx()),
+        version: VERSION(),
+        total_staked: 0,
+        allowed_position_token_list: vector::empty(),
+        // tick_reward_tiers: vector::empty(),
+        reward_pools: vector::empty(),
+        flowx_v3_address: @weissfarming, // Use this module's address for testing
+    };
+
+    let admin_cap = intern_new_farm_admin(object::id(&new_farm), scenario.ctx());
+
+    transfer::public_share_object(new_farm);
+    transfer::public_transfer(admin_cap, scenario.ctx().sender());
+
+}
+
+#[test_only]
+public fun init_create_reward_pool<T>(admin_cap: &mut AdminCap, farm: &mut Farm, decimals: u8, scenario: &mut Scenario){
+    create_reward_pool<T>(admin_cap, farm, decimals, scenario.ctx());
+}
+
+
+#[test]
+fun test_stake_position(){
+    let mut scenario = test_scenario::begin(ADMIN);
+    scenario.next_tx(ADMIN);
+    {
+        init_package(&mut scenario);
+    };
+    scenario.next_tx(ADMIN);
+    let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
+    let mut farm = scenario.take_shared<Farm>();
+    {        
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
+        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+    
+    };
+
+    scenario.next_tx(ALICE);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm,scenario.ctx());
+        let reward_pool_info = vector::borrow(&farm.reward_pools, 0);
+        
+        assert_eq!(reward_pool_info.decimals, 8u8);
+        assert_eq!(reward_pool_info.global_index, 0);
+        assert_eq!(reward_pool_info.token_type, type_name::get<TEST_FLX>());
+        
+    };
+    scenario.next_tx(ALICE);
+    {
+        let holder_position_cap = scenario.take_from_sender<HolderPositionCap>();
+        assert_eq!(holder_position_cap.farm_id, object::id(&farm));
+
+        let holder_reward_info = table::borrow(&holder_position_cap.reward_info, type_name::get<TEST_FLX>());
+        let reward_pool_info = vector::borrow(&farm.reward_pools, 0);
+        assert_eq!(holder_reward_info.user_index, reward_pool_info.global_index);
+        scenario.return_to_sender(holder_position_cap);
+    };
+    
+   
+    transfer::public_share_object(farm);
+    transfer::public_transfer(admin_cap, ADMIN);
+    scenario.end();
+}
+
+#[test]
+fun test_distribute_rewards(){
+    let mut scenario = test_scenario::begin(ADMIN);
+    scenario.next_tx(ADMIN);
+    {
+        init_package(&mut scenario);
+    };
+    scenario.next_tx(ADMIN);
+    let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
+    let mut farm = scenario.take_shared<Farm>();
+    {        
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 9, &mut scenario);
+        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
+        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+    
+    };
+
+    scenario.next_tx(ADMIN);
+    let mut reward_pool_flx = scenario.take_shared<RewardPool<TEST_FLX>>();
+    let mut reward_pool_sui = scenario.take_shared<RewardPool<SUI>>();
+    {
+        // mint 10000 FLX tokens and distribute
+        let coll_flx = coin::mint_for_testing<TEST_FLX>(1_000_000_000_000, scenario.ctx());
+        distribute_rewards<TEST_FLX>(coll_flx, &mut reward_pool_flx, &mut farm);
+
+        // mint 10000 SUI tokens and distribute
+        let coll_sui = coin::mint_for_testing<SUI>(10_000_000_000_000, scenario.ctx());
+        distribute_rewards<SUI>(coll_sui, &mut reward_pool_sui, &mut farm);
+
+    };
+
+    scenario.next_tx(ADMIN);
+    {
+        assert_eq!(reward_pool_flx.get_balance(),  1_000_000_000_000);
+        assert_eq!(reward_pool_flx.get_farm_id(),  object::id(&farm));
+        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(1_000_000_000_000, 8).to_scaled_val());
+
+        assert_eq!(reward_pool_sui.get_balance(),  10_000_000_000_000);
+        assert_eq!(reward_pool_sui.get_farm_id(),  object::id(&farm));
+        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(10_000_000_000_000, 9).to_scaled_val());
+    };
+    
+    transfer::public_share_object(farm);
+    transfer::public_transfer(admin_cap, ADMIN);
+    transfer::public_share_object(reward_pool_flx); 
+    transfer::public_share_object(reward_pool_sui); 
+    scenario.end();
+}
+
+#[test]
+fun test_claim_rewards(){
+    let mut scenario = test_scenario::begin(ADMIN);
+    scenario.next_tx(ADMIN);
+    {
+        init_package(&mut scenario);
+    };
+    scenario.next_tx(ADMIN);
+    let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
+    let mut farm = scenario.take_shared<Farm>();
+    {        
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 9, &mut scenario);
+        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
+        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+    
+    };
+
+    scenario.next_tx(ALICE);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm,scenario.ctx());
+        let reward_pool_info = vector::borrow(&farm.reward_pools, 0);
+        
+        assert_eq!(reward_pool_info.decimals, 8u8);
+        assert_eq!(reward_pool_info.global_index, 0);
+        assert_eq!(reward_pool_info.token_type, type_name::get<TEST_FLX>());
+        
+    };
+
+    scenario.next_tx(ADMIN);
+    let mut reward_pool_flx = scenario.take_shared<RewardPool<TEST_FLX>>();
+    let mut reward_pool_sui = scenario.take_shared<RewardPool<SUI>>();
+    {
+        // mint 10000 FLX tokens and distribute
+        let coll_flx = coin::mint_for_testing<TEST_FLX>(1_000_000_000_000, scenario.ctx());
+        distribute_rewards<TEST_FLX>(coll_flx, &mut reward_pool_flx, &mut farm);
+
+        // mint 10000 SUI tokens and distribute
+        let coll_sui = coin::mint_for_testing<SUI>(10_000_000_000_000, scenario.ctx());
+        distribute_rewards<SUI>(coll_sui, &mut reward_pool_sui, &mut farm);
+
+    };
+
+    scenario.next_tx(ALICE);
+    {
+        let mut holder_position_cap = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut holder_position_cap, &mut reward_pool_flx, &mut farm, scenario.ctx());
+        scenario.return_to_sender(holder_position_cap);
+    };
+
+    scenario.next_tx(ADMIN);
+    {
+        assert_eq!(reward_pool_flx.get_balance(),  1);
+        assert_eq!(reward_pool_flx.get_farm_id(),  object::id(&farm));
+        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 8).to_scaled_val());
+
+        assert_eq!(reward_pool_sui.get_balance(),  10_000_000_000_000);
+        assert_eq!(reward_pool_sui.get_farm_id(),  object::id(&farm));
+        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 9).to_scaled_val());
+    };
+
+    scenario.next_tx(ALICE);
+    {
+        let mut holder_position_cap = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut holder_position_cap, &mut reward_pool_sui, &mut farm, scenario.ctx());
+        scenario.return_to_sender(holder_position_cap);
+    };
+
+    scenario.next_tx(ADMIN);
+    {
+        assert_eq!(reward_pool_flx.get_balance(),  1);
+        assert_eq!(reward_pool_flx.get_farm_id(),  object::id(&farm));
+        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 8).to_scaled_val());
+
+        assert_eq!(reward_pool_sui.get_balance(),  1);
+        assert_eq!(reward_pool_sui.get_farm_id(),  object::id(&farm));
+        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 9).to_scaled_val());
+    };
+
+ 
+    transfer::public_share_object(farm);
+    transfer::public_transfer(admin_cap, ADMIN);
+    transfer::public_share_object(reward_pool_flx); 
+    transfer::public_share_object(reward_pool_sui); 
+    scenario.end();
+}
+
+
+#[test]
+fun test_unstake_position(){
+    let mut scenario = test_scenario::begin(ADMIN);
+    scenario.next_tx(ADMIN);
+    {
+        init_package(&mut scenario);
+    };
+    scenario.next_tx(ADMIN);
+    let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
+    let mut farm = scenario.take_shared<Farm>();
+    {        
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
+        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+    
+    };
+
+    scenario.next_tx(ALICE);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm,scenario.ctx());        
+    };
+    scenario.next_tx(ALICE);
+    {
+        let holder_position_cap = scenario.take_from_sender<HolderPositionCap>();
+        unstake_position(holder_position_cap, &mut farm,scenario.ctx());                
+    };
+    
+   
+    transfer::public_share_object(farm);
+    transfer::public_transfer(admin_cap, ADMIN);
+    scenario.end();
+}
+
+
+
+
+// Check error the position staked is not allowed wrong token type
+#[test, expected_failure(abort_code=0, location=weissfarming::farm_flowx)]
+fun fail_test_stake_position_tokens_type_not_match(){
+    let mut scenario = test_scenario::begin(ADMIN);
+    scenario.next_tx(ADMIN);
+    {
+        init_package(&mut scenario);
+    };
+    scenario.next_tx(ADMIN);
+    let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
+    let mut farm = scenario.take_shared<Farm>();
+    {        
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        initialize_allowed_tokens<TEST_FAKE>(&admin_cap,&mut farm);
+        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+    };
+
+    scenario.next_tx(ADMIN);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm,scenario.ctx());
+    };
+    
+    scenario.return_to_sender(admin_cap);
+    transfer::public_share_object(farm);
+    scenario.end();
+}
+
+#[test]
+fun test_multiple_stakers_reward_distribution(){
+    let mut scenario = test_scenario::begin(ADMIN);
+    scenario.next_tx(ADMIN);
+    {
+        init_package(&mut scenario);
+    };
+    scenario.next_tx(ADMIN);
+    let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
+    let mut farm = scenario.take_shared<Farm>();
+    {        
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
+        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+    };
+
+    // Alice stakes first
+    scenario.next_tx(ALICE);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm, scenario.ctx());
+    };
+
+    // Bob stakes second
+    scenario.next_tx(BOB);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm, scenario.ctx());
+    };
+
+    // First reward distribution - Alice and Bob should get equal rewards
+    scenario.next_tx(ADMIN);
+    let mut reward_pool_flx = scenario.take_shared<RewardPool<TEST_FLX>>();
+    {
+        let first_reward = coin::mint_for_testing<TEST_FLX>(2_000_000_000_000, scenario.ctx());
+        distribute_rewards<TEST_FLX>(first_reward, &mut reward_pool_flx, &mut farm);
+    };
+
+    // Check Alice's rewards after first distribution
+    scenario.next_tx(ALICE);
+    let alice_balance_before_claim;
+    {
+        let mut alice_holder = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut alice_holder, &mut reward_pool_flx, &mut farm, scenario.ctx());
+        scenario.return_to_sender(alice_holder);
+    };
+    scenario.next_tx(ALICE);
+    {
+        let alice_coin = scenario.take_from_sender<Coin<TEST_FLX>>();
+        alice_balance_before_claim = alice_coin.value();
+        coin::burn_for_testing(alice_coin);
+    };
+    // Check Bob's rewards after first distribution
+    scenario.next_tx(BOB);
+    let bob_balance_before_claim;
+    {
+       
+
+        let mut bob_holder = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut bob_holder, &mut reward_pool_flx, &mut farm, scenario.ctx());
+        scenario.return_to_sender(bob_holder);
+    };
+    scenario.next_tx(BOB);
+    {
+        let bob_coin = scenario.take_from_sender<Coin<TEST_FLX>>();
+        bob_balance_before_claim = bob_coin.value();
+        coin::burn_for_testing(bob_coin);
+    };
+
+    // Alice and Bob should have equal rewards from first distribution
+    assert_eq!(alice_balance_before_claim, bob_balance_before_claim);
+    print(&b"Alice and Bob first rewards: ".to_string());
+    print(&alice_balance_before_claim);
+
+    // Second reward distribution - Alice and Bob should get more rewards
+    scenario.next_tx(ADMIN);
+    {
+        let second_reward = coin::mint_for_testing<TEST_FLX>(1_000_000_000_000, scenario.ctx());
+        distribute_rewards<TEST_FLX>(second_reward, &mut reward_pool_flx, &mut farm);
+    };
+
+    // Charlie stakes after second distribution
+    scenario.next_tx(CHARLIE);
+    {
+        let position = init_flowx_position(&mut scenario);
+        stake_position(position, &mut farm, scenario.ctx());
+    };
+
+    // Third reward distribution - all three should be included
+    scenario.next_tx(ADMIN);
+    {
+        let third_reward = coin::mint_for_testing<TEST_FLX>(3_000_000_000_000, scenario.ctx());
+        distribute_rewards<TEST_FLX>(third_reward, &mut reward_pool_flx, &mut farm);
+    };
+
+    // Check final rewards
+    scenario.next_tx(ALICE);
+    let alice_final_balance;
+    {
+        let mut alice_holder = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut alice_holder, &mut reward_pool_flx, &mut farm, scenario.ctx());
+        scenario.return_to_sender(alice_holder);
+        
+    };
+    scenario.next_tx(ALICE);
+    {
+        let alice_coin = scenario.take_from_sender<Coin<TEST_FLX>>();
+        alice_final_balance = alice_coin.value();
+        coin::burn_for_testing(alice_coin);
+    };
+
+    scenario.next_tx(BOB);
+    let bob_final_balance;
+    {
+        let mut bob_holder = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut bob_holder, &mut reward_pool_flx, &mut farm, scenario.ctx());
+        scenario.return_to_sender(bob_holder);
+      
+    };
+    scenario.next_tx(BOB);
+    {
+        let bob_coin = scenario.take_from_sender<Coin<TEST_FLX>>();
+        bob_final_balance = bob_coin.value();
+        coin::burn_for_testing(bob_coin);
+    };
+
+    scenario.next_tx(CHARLIE);
+    let charlie_final_balance;
+    {
+        let mut charlie_holder = scenario.take_from_sender<HolderPositionCap>();
+        claim_rewards(&mut charlie_holder, &mut reward_pool_flx, &mut farm, scenario.ctx());
+        scenario.return_to_sender(charlie_holder);
+    };
+    scenario.next_tx(CHARLIE);
+    {
+        let charlie_coin = scenario.take_from_sender<Coin<TEST_FLX>>();
+        charlie_final_balance = charlie_coin.value();
+        coin::burn_for_testing(charlie_coin);
+    };
+
+    // Verify reward distribution correctness:
+    // 1. Alice and Bob should have equal rewards (both staked from beginning)
+    assert_eq!(alice_final_balance, bob_final_balance);
+    
+    // 2. Alice and Bob should have MORE rewards than Charlie (who joined later)
+    assert!(alice_final_balance > charlie_final_balance);
+    assert!(bob_final_balance > charlie_final_balance);
+    
+    // 3. Charlie should receive approximately 1/3 of the third distribution only
+    // Allowing for some rounding due to decimal precision
+    assert!(charlie_final_balance > 900_000_000_000); // At least 90% of expected ~1B
+    assert!(charlie_final_balance < 1_100_000_000_000); // At most 110% of expected ~1B
+    
+    // 4. Alice and Bob should have accumulated rewards from all distributions
+    assert!(alice_final_balance > 1_400_000_000_000); // Should be around 1.5B
+    assert!(alice_final_balance < 1_600_000_000_000);
+
+    transfer::public_share_object(farm);
+    transfer::public_transfer(admin_cap, ADMIN);
+    transfer::public_share_object(reward_pool_flx);
+    scenario.end();
+}
