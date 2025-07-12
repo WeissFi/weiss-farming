@@ -22,7 +22,7 @@ homepage = "https://weiss.finance"
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-weissfarming = "0x0"
+weissfarming = "0x06f1d8f889b1de7cd763abdcdc449846cec78114fe59dc5d2b2f7bc0cfbf5997"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
