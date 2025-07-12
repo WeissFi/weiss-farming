@@ -300,11 +300,11 @@ entry public fun init_holder_position_cap_display(admin_cap: &AdminCap, farm: &F
     let values = vector[
         b"WeissFi Farming Liquidity Position".to_string(),
         // For `link` one can build a URL using an `id` property
-        b"https://yields.finance/flp/{id}".to_string(),
+        b"https://weiss.finance/flp/{id}".to_string(),
         // `image_url` use an IPFS template
-        b"https://weissfi.s3.eu-west-3.amazonaws.com/sui-vault-512x512.png".to_string(), // 512x512 ratio 1:1 svg under 1mb
+        b"https://weissfi.s3.eu-west-3.amazonaws.com/farming-512x512.png".to_string(), // 512x512 ratio 1:1 svg under 1mb
         // `thumbnail_url` use an IPFS template
-        b"https://weissfi.s3.eu-west-3.amazonaws.com/sui-vault-256x256.png".to_string(), // 256 × 256 px or 128 × 128 px svg under 100kb
+        b"https://weissfi.s3.eu-west-3.amazonaws.com/farming-256x256.png".to_string(), // 256 × 256 px or 128 × 128 px svg under 100kb
         // Description is static for all `HolderPositionCap` objects.
         b"This NFT represents your staked FlowX liquidity position in WeissFi farming protocol. Use this to claim accumulated rewards, unstake your position, or transfer your farming rights to another address.".to_string(),
         // Project URL is usually static
