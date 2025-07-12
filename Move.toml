@@ -1,45 +1,18 @@
 [package]
 name = "weissFarming"
 version = "0.0.1"
-edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
+edition = "2024.beta"
 license = "Proprietary"
 authors = ["@0xantman (contact@weiss.finance)"]
-description = "WeissFi Farming Protocol - Secure liquidity farming for FlowX CLMM positions on Sui"
-repository = "https://github.com/weissfi/weiss-farming"
-homepage = "https://weiss.finance"
 
 [dependencies]
-
-# For remote import, use the `{ git = "...", subdir = "...", rev = "..." }`.
-# Revision can be a branch, a tag, and a commit hash.
-# MyRemotePackage = { git = "https://some.remote/host.git", subdir = "remote/path", rev = "main" }
-
-# For local dependencies use `local = path`. Path is relative to the package root
-# Local = { local = "../path/to" }
-
-# To resolve a version conflict and force a specific version for dependency
-# override use `override = true`
-# Override = { local = "../conflicting/version", override = true }
+flowx = { local = "deps/flowx_stub/flowx" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
 
 [addresses]
-weissfarming = "0x06f1d8f889b1de7cd763abdcdc449846cec78114fe59dc5d2b2f7bc0cfbf5997"
-
-# Named addresses will be accessible in Move as `@name`. They're also exported:
-# for example, `std = "0x1"` is exported by the Standard Library.
-# alice = "0xA11CE"
+weissfarming = "0x0"
+flowx = "0x25929e7f29e0a30eb4e692952ba1b5b65a3a4d65ab5f2a32e1ba3edcb587f26d"
 
 [dev-dependencies]
-# The dev-dependencies section allows overriding dependencies for `--test` and
-# `--dev` modes. You can introduce test-only dependencies here.
-# Local = { local = "../path/to/dev-build" }
 
 [dev-addresses]
-# The dev-addresses section allows overwriting named addresses for the `--test`
-# and `--dev` modes.
-# alice = "0xB0B"
-
-[dependencies.Sui]
-git = "https://github.com/MystenLabs/sui.git"
-subdir = "crates/sui-framework/packages/sui-framework"
-rev = "framework/mainnet"
-override = true

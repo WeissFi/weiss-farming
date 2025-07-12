@@ -1,0 +1,6 @@
+// Publish package
+ sui client publish --gas-budget 994973780 --with-unpublished-dependencies
+// Init Display
+sui client call --package 0x06f1d8f889b1de7cd763abdcdc449846cec78114fe59dc5d2b2f7bc0cfbf5997 --module farm_flowx --function init_holder_position_cap_display --args 0x85bc484b2f21879bde7cee073f66c8325213e0a9b292588e12e6ec84a774b1b4 0x7a0e97e045ccbfb61ca1e053cc6582d4f0fc709b16b1dd1aa5195ce149f1e4fa 0xc1b31d01c7196d4459b834dc2f587a15f2610c0a7936410f9d9850c4154719a4
+// Create pool reward
+sui client call --package 0x06f1d8f889b1de7cd763abdcdc449846cec78114fe59dc5d2b2f7bc0cfbf5997 --module farm_flowx --function create_reward_pool --type-args "0xc436a8ccc36e649e0fd8c7cec88ca89747b69ba5bdefb15be2f93ae1ae632800::dori::DORI" --args 0x85bc484b2f21879bde7cee073f66c8325213e0a9b292588e12e6ec84a774b1b4 0x7a0e97e045ccbfb61ca1e053cc6582d4f0fc709b16b1dd1aa5195ce149f1e4fa 9

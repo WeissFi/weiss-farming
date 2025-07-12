@@ -16,6 +16,9 @@ use sui::address;
 
 use std::type_name::{Self, TypeName};
 
+// Import FlowX position types from local stub
+// use flowx::position::{Self, Position};
+use flowx::position::{Self, Position};
 
 // === Structs ===
 public struct RewardPoolInfo has store {
@@ -46,29 +49,6 @@ public struct HolderPositionCap has key, store {
     position: Position,
 }
 
-public struct I32 has copy, drop, store {
-    bits: u32
-}
-
-public struct PositionRewardInfo has copy, drop, store {
-	reward_growth_inside_last: u128,
-	coins_owed_reward: u64
-}
-public struct Position has key, store {
-	id: UID,
-	pool_id: ID,
-	fee_rate: u64,
-	coin_type_x: TypeName,
-	coin_type_y: TypeName,
-	tick_lower_index: I32,
-	tick_upper_index: I32,
-	liquidity: u128,
-	fee_growth_inside_x_last: u128,
-    fee_growth_inside_y_last: u128,
-	coins_owed_x: u64,
-	coins_owed_y: u64,
-	reward_infos: vector<PositionRewardInfo>
-}
 
 // === Public Functions ===
 entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut TxContext){
@@ -81,8 +61,8 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     assert!(position_addr == farm.flowx_v3_address, EInvalidPositionSource());
     
     // Assert position is allowed to stake
-    assert!(farm.allowed_position_token_list.contains(&position.coin_type_x), ENotAllowedTypeName());
-    assert!(farm.allowed_position_token_list.contains(&position.coin_type_y), ENotAllowedTypeName());
+    assert!(farm.allowed_position_token_list.contains(&position::coin_type_x(&position)), ENotAllowedTypeName());
+    assert!(farm.allowed_position_token_list.contains(&position::coin_type_y(&position)), ENotAllowedTypeName());
 
     let mut reward_info = table::new(ctx);
 
@@ -103,16 +83,16 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     // Emit new stake position
     emit_new_stake_position_event(
         object::id(farm),
-        wf_decimal::from_q64(position.liquidity).to_scaled_val(),
+        wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val(),
     );
   
     // Update farm total staked
-    farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_q64(position.liquidity)).to_scaled_val();
+    farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_q64(position::liquidity(&position))).to_scaled_val();
 
     let holder_position = HolderPositionCap {
         id: object::new(ctx),
         farm_id: object::id(farm),
-        balance: wf_decimal::from_q64(position.liquidity).to_scaled_val(),
+        balance: wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val(),
         reward_info,
         position,
     };
@@ -152,7 +132,7 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
 
     emit_unstake_position_event(
         object::id(farm),
-        wf_decimal::from_q64(position.liquidity).to_scaled_val()
+        wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val()
     );
 
     // Update farm total staked (subtract the position's liquidity)
@@ -387,7 +367,8 @@ use sui::test_scenario::{Self, Scenario};
 use std::unit_test::assert_eq;
 #[test_only]
 use std::debug::print;
-
+#[test_only]
+use flowx::i32::new_i32;
 // Test token types representing DORI and USDC
 #[test_only]
 public struct TEST_DORI has drop {}
@@ -395,8 +376,6 @@ public struct TEST_DORI has drop {}
 public struct TEST_USDC has drop {}
 #[test_only]
 public struct TEST_FLX has drop {}
-
-
 #[test_only]
 public struct TEST_FAKE has drop {}
 
@@ -405,22 +384,21 @@ public fun init_flowx_position(scenario: &mut Scenario): Position {
     // Create a position that mimics FlowX v3 structure
     // Note: This creates a position with our module's address, not FlowX's
     // For real testing, you need to use actual FlowX positions on testnet
-    
-    let flowx_position = Position {
-        id: object::new(scenario.ctx()),
-        pool_id: object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b),
-        fee_rate: 100,
-        coin_type_x: type_name::get<TEST_DORI>(),
-        coin_type_y: type_name::get<TEST_USDC>(),
-        tick_lower_index: I32 { bits: 4294897702 },
-        tick_upper_index: I32 { bits: 4294898702 },
-        liquidity: 6559457486451,
-        fee_growth_inside_x_last: 4212516769486,
-        fee_growth_inside_y_last: 12990396982,
-        coins_owed_x: 1497626,
-        coins_owed_y: 4619,
-        reward_infos: vector::empty(),
-    };
+
+    let flowx_position = position::new_position(
+        object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b),
+        100,
+        type_name::get<TEST_DORI>(),
+        type_name::get<TEST_USDC>(),
+        new_i32(4294897702),
+        new_i32(4294898702),
+        6559457486451,
+        4212516769486,
+        12990396982,
+        1497626,
+        4619,
+        scenario.ctx()
+    );
     flowx_position
 }
 
@@ -434,7 +412,7 @@ public fun init_package(scenario: &mut Scenario) {
         allowed_position_token_list: vector::empty(),
         // tick_reward_tiers: vector::empty(),
         reward_pools: vector::empty(),
-        flowx_v3_address: @weissfarming, // Use this module's address for testing
+        flowx_v3_address: @flowx, // Use flowx stub address for testing
     };
 
     let admin_cap = intern_new_farm_admin(object::id(&new_farm), scenario.ctx());

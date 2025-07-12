@@ -2,10 +2,11 @@
 
 [move]
 version = 3
-manifest_digest = "4B7A9C70C26A8AA4C93BC5007CE605AB967BEE9248D01295964C52E8609BF355"
-deps_digest = "F8BBB0CCB2491CA29A3DF03D6F92277A4F3574266507ACD77214D37ECA3F3082"
+manifest_digest = "A8C691ABBC95E657764D21CAE97A20DCFCFAA8888989BBEFF8FDC074BD6A1CED"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Sui", name = "Sui" },
+  { id = "flowx", name = "flowx" },
 ]
 
 [[move.package]]
@@ -20,15 +21,15 @@ dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
 ]
 
+[[move.package]]
+id = "flowx"
+source = { local = "deps/flowx_stub/flowx" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+]
+
 [move.toolchain-version]
-compiler-version = "1.50.1"
+compiler-version = "1.51.3"
 edition = "2024.beta"
 flavor = "sui"
-
-[env]
-
-[env.mainnet]
-chain-id = "35834a8a"
-original-published-id = "0x06f1d8f889b1de7cd763abdcdc449846cec78114fe59dc5d2b2f7bc0cfbf5997"
-latest-published-id = "0x06f1d8f889b1de7cd763abdcdc449846cec78114fe59dc5d2b2f7bc0cfbf5997"
-published-version = "1"
