@@ -2,7 +2,7 @@ module weissfarming::farm_flowx;
 
 // === Imports ===
 use weissfarming::wf_decimal;
-use weissfarming::errors::{ENotAllowedTypeName, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, EInvalidPositionSource};
+use weissfarming::errors::{ENotAllowedPool, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, EInvalidPositionSource};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
@@ -17,7 +17,6 @@ use sui::address;
 use std::type_name::{Self, TypeName};
 
 // Import FlowX position types from local stub
-// use flowx::position::{Self, Position};
 use flowx::position::{Self, Position};
 
 // === Structs ===
@@ -32,7 +31,7 @@ public struct Farm has key, store {
     id: UID,
     version: u64,
     total_staked: u256,
-    allowed_position_token_list: vector<TypeName>,
+    allowed_pool_ids: vector<ID>,
     // tick_reward_tiers: vector<TickRewardTier>,
     reward_pools: vector<RewardPoolInfo>,
     flowx_v3_address: address,
@@ -60,9 +59,9 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     let position_addr = address::from_ascii_bytes(address_string.as_bytes());
     assert!(position_addr == farm.flowx_v3_address, EInvalidPositionSource());
     
-    // Assert position is allowed to stake
-    assert!(farm.allowed_position_token_list.contains(&position::coin_type_x(&position)), ENotAllowedTypeName());
-    assert!(farm.allowed_position_token_list.contains(&position::coin_type_y(&position)), ENotAllowedTypeName());
+    // Assert position pool is allowed to stake
+    let pool_id = position::pool_id(&position);
+    assert!(farm.allowed_pool_ids.contains(&pool_id), ENotAllowedPool());
 
     let mut reward_info = table::new(ctx);
 
@@ -307,13 +306,12 @@ entry fun migrate(admin_cap: &AdminCap, farm: &mut Farm) {
     farm.version = VERSION();
 }
 
-entry public fun initialize_allowed_tokens<T>(admin_cap: &AdminCap, farm: &mut Farm) {
+entry public fun initialize_allowed_pool(admin_cap: &AdminCap, farm: &mut Farm, pool_id: ID) {
     assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
     assert!(farm.version == VERSION(), EPackageVersionError());
-    // Add token type
-    let type_name = type_name::get<T>();
-    if (!farm.allowed_position_token_list.contains(&type_name)) {
-        vector::push_back(&mut farm.allowed_position_token_list, type_name);
+    // Add pool ID
+    if (!farm.allowed_pool_ids.contains(&pool_id)) {
+        vector::push_back(&mut farm.allowed_pool_ids, pool_id);
     };
 }
 
@@ -323,7 +321,7 @@ fun init(ctx: &mut TxContext){
         id: object::new(ctx),
         version: VERSION(),
         total_staked: 0,
-        allowed_position_token_list: vector::empty(),
+        allowed_pool_ids: vector::empty<ID>(),
         // tick_reward_tiers: vector::empty(),
         reward_pools: vector::empty(),
         flowx_v3_address: FLOWX_V3_ADDRESS(),
@@ -368,7 +366,7 @@ use std::unit_test::assert_eq;
 #[test_only]
 use std::debug::print;
 #[test_only]
-use flowx::i32::new_i32;
+use flowx::i32::from_u32;
 // Test token types representing DORI and USDC
 #[test_only]
 public struct TEST_DORI has drop {}
@@ -385,18 +383,13 @@ public fun init_flowx_position(scenario: &mut Scenario): Position {
     // Note: This creates a position with our module's address, not FlowX's
     // For real testing, you need to use actual FlowX positions on testnet
 
-    let flowx_position = position::new_position(
+    let flowx_position = position::open(
         object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b),
         100,
         type_name::get<TEST_DORI>(),
         type_name::get<TEST_USDC>(),
-        new_i32(4294897702),
-        new_i32(4294898702),
-        6559457486451,
-        4212516769486,
-        12990396982,
-        1497626,
-        4619,
+        from_u32(4294897702),
+        from_u32(4294898702),
         scenario.ctx()
     );
     flowx_position
@@ -409,7 +402,7 @@ public fun init_package(scenario: &mut Scenario) {
         id: object::new(scenario.ctx()),
         version: VERSION(),
         total_staked: 0,
-        allowed_position_token_list: vector::empty(),
+        allowed_pool_ids: vector::empty<ID>(),
         // tick_reward_tiers: vector::empty(),
         reward_pools: vector::empty(),
         flowx_v3_address: @flowx, // Use flowx stub address for testing
@@ -440,8 +433,9 @@ fun test_stake_position(){
     let mut farm = scenario.take_shared<Farm>();
     {        
         init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
-        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
-        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+        // Add dummy pool ID for testing  
+        let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
+        initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
     
     };
 
@@ -486,8 +480,9 @@ fun test_distribute_rewards(){
     {        
         init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
         init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 9, &mut scenario);
-        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
-        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+        // Add dummy pool ID for testing  
+        let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
+        initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
     
     };
 
@@ -536,8 +531,9 @@ fun test_claim_rewards(){
     {        
         init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
         init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 9, &mut scenario);
-        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
-        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+        // Add dummy pool ID for testing  
+        let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
+        initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
     
     };
 
@@ -624,8 +620,9 @@ fun test_unstake_position(){
     let mut farm = scenario.take_shared<Farm>();
     {        
         init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
-        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
-        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+        // Add dummy pool ID for testing  
+        let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
+        initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
     
     };
 
@@ -662,8 +659,9 @@ fun fail_test_stake_position_tokens_type_not_match(){
     let mut farm = scenario.take_shared<Farm>();
     {        
         init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
-        initialize_allowed_tokens<TEST_FAKE>(&admin_cap,&mut farm);
-        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+        // Add wrong pool ID for testing (should fail)
+        let wrong_pool_id = object::id_from_address(@0x1111);
+        initialize_allowed_pool(&admin_cap, &mut farm, wrong_pool_id);
     };
 
     scenario.next_tx(ADMIN);
@@ -689,8 +687,9 @@ fun test_multiple_stakers_reward_distribution(){
     let mut farm = scenario.take_shared<Farm>();
     {        
         init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
-        initialize_allowed_tokens<TEST_DORI>(&admin_cap,&mut farm);
-        initialize_allowed_tokens<TEST_USDC>(&admin_cap,&mut farm);
+        // Add dummy pool ID for testing  
+        let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
+        initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
     };
 
     // Alice stakes first
