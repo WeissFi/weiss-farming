@@ -2,7 +2,7 @@ module weissfarming::farm_flowx;
 
 // === Imports ===
 use weissfarming::wf_decimal;
-use weissfarming::errors::{ENotAllowedPool, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, EInvalidPositionSource};
+use weissfarming::errors::{ENotAllowedPool, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, EInvalidPositionSource, ENoRewardsToClaim};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
@@ -170,6 +170,9 @@ entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, r
                 wf_decimal::from_scaled_val(holder_position_cap.balance)
             );
             let rewards_to_u64 = rewards.to_native_token(reward_pool_info.decimals);
+            
+            // Assert that there are rewards to claim
+            assert!(rewards_to_u64 > 0, ENoRewardsToClaim());
 
             let reward_coin = reward_pool::intern_withdraw_balance<T>(rewards_to_u64, reward_pool);
             // Emit claim reward event

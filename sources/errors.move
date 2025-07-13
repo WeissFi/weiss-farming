@@ -10,3 +10,4 @@ public fun EInvalidRewardPool(): u64 {5}
 public fun EInvalidHolderPositionCap(): u64 {6}
 public fun EPackageVersionError(): u64 {7}
 public fun EInvalidPositionSource(): u64 {8}
+public fun ENoRewardsToClaim(): u64 {9}
