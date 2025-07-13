@@ -6,7 +6,7 @@ license = "Proprietary"
 authors = ["@0xantman (contact@weiss.finance)"]
 
 [dependencies]
-flowx = { local = "deps/flowx_stub/flowx" }
+flowx = { git = "https://github.com/WeissFi/weiss-farming.git", subdir = "deps/flowx_stub/flowx", rev = "main" }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
 
 [addresses]
