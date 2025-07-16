@@ -7,8 +7,8 @@ use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
-use weissfarming::events_v1::{ emit_unstake_position_event, emit_claim_reward_event, emit_distribute_reward_event, emit_new_reward_pool_created_event};
-use weissfarming::events_v2::{ emit_new_stake_position_event_v2 };
+use weissfarming::events_v1::{ emit_distribute_reward_event, emit_new_reward_pool_created_event};
+use weissfarming::events_v2::{ emit_new_stake_position_event_v2_1, emit_unstake_position_event_v2, emit_claim_reward_event_v2 };
 
 use sui::coin::{Coin};
 use sui::display;
@@ -82,14 +82,10 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         i = i + 1;
     };
    
-    // Emit new stake position
-    emit_new_stake_position_event_v2(
-        object::id(farm),
-        wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val(),
-        position::liquidity(&position),
-        position::tick_lower_index(&position),
-        position::tick_upper_index(&position)
-    );
+    let balance_for_emit = wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val();
+    let liquidity_for_emit = position::liquidity(&position);
+    let tick_lower_index_for_emit = position::tick_lower_index(&position);
+    let tick_upper_index_for_emit = position::tick_lower_index(&position);
   
     // Update farm total staked
     farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_q64(position::liquidity(&position))).to_scaled_val();
@@ -101,6 +97,15 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         reward_info,
         position,
     };
+      // Emit new stake position
+    emit_new_stake_position_event_v2_1(
+        object::id(&holder_position),
+        object::id(farm),
+        balance_for_emit,
+        liquidity_for_emit,
+        tick_lower_index_for_emit,
+        tick_upper_index_for_emit
+    );
 
     // Transfer actual position embeded to the user so only him own his position
     transfer::public_transfer(holder_position, ctx.sender());
@@ -109,6 +114,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
 entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: &mut Farm, ctx: &mut TxContext){
     assert!(farm.version == VERSION(), EPackageVersionError());
     assert!(holder_position_cap.farm_id == object::id(farm), EInvalidHolderPositionCap());
+    let holder_position_cap_id = object::id(&holder_position_cap);
     // Destructure the HolderPositionCap
     let HolderPositionCap {
         id,
@@ -135,7 +141,8 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
         i = i + 1;
     };
 
-    emit_unstake_position_event(
+    emit_unstake_position_event_v2(
+        holder_position_cap_id,
         object::id(farm),
         wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val()
     );
@@ -154,6 +161,7 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
 entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, reward_pool: &mut RewardPool<T>, farm: &mut Farm, ctx: &mut TxContext){
     assert!(farm.version == VERSION(), EPackageVersionError());
     let farm_id= object::id(farm);
+    let holder_position_cap_id = object::id(holder_position_cap);
     assert!(holder_position_cap.farm_id == farm_id, EInvalidHolderPositionCap());
     assert!(reward_pool::get_farm_id(reward_pool) == farm_id, EInvalidRewardPool());
 
@@ -182,7 +190,8 @@ entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, r
 
             let reward_coin = reward_pool::intern_withdraw_balance<T>(rewards_to_u64, reward_pool);
             // Emit claim reward event
-            emit_claim_reward_event(
+            emit_claim_reward_event_v2(
+                holder_position_cap_id,
                 farm_id, 
                 reward_coin.value(),
                 type_name::get<T>().into_string()

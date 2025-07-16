@@ -5,16 +5,17 @@ use sui::event;
 use std::ascii::String;
 
 // === Events ===
+#[allow(unused_field)]
 public struct NewStakePositionEvent has copy, drop {
     farm_id: ID,
     balance: u256,
 }
-
+#[allow(unused_field)]
 public struct UnstakePositionEvent has copy, drop {
     farm_id: ID,
     balance: u256
 }
-
+#[allow(unused_field)]
 public struct ClaimRewardEvent has copy, drop {
     farm_id: ID,
     amount: u64,
@@ -33,26 +34,16 @@ public struct NewRewardPoolCreatedEvent has copy, drop {
     coin_type: String
 }
 
-public fun emit_new_stake_position_event(farm_id: ID, balance: u256) {
-    event::emit(NewStakePositionEvent {
-        farm_id,
-        balance,
-    });
+public fun emit_new_stake_position_event(_farm_id: ID, _balance: u256) {
+    abort 0
 }
 
-public fun emit_unstake_position_event(farm_id: ID, balance: u256) {
-    event::emit(UnstakePositionEvent {
-        farm_id,
-        balance,
-    });
+public fun emit_unstake_position_event(_farm_id: ID, _balance: u256) {
+    abort 0
 }
 
-public fun emit_claim_reward_event(farm_id: ID, amount: u64, coin_type: String) {
-    event::emit(ClaimRewardEvent {
-        farm_id,
-        amount,
-        coin_type
-    });
+public fun emit_claim_reward_event(_farm_id: ID, _amount: u64, _coin_type: String) {
+    abort 0
 }
 
 public fun emit_distribute_reward_event(farm_id: ID, amount: u64, coin_type: String) {
