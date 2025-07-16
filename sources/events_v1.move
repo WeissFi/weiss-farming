@@ -7,7 +7,7 @@ use std::ascii::String;
 // === Events ===
 public struct NewStakePositionEvent has copy, drop {
     farm_id: ID,
-    balance: u256
+    balance: u256,
 }
 
 public struct UnstakePositionEvent has copy, drop {

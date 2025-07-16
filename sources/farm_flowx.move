@@ -7,7 +7,9 @@ use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
-use weissfarming::events_v1::{emit_new_stake_position_event, emit_unstake_position_event, emit_claim_reward_event, emit_distribute_reward_event, emit_new_reward_pool_created_event};
+use weissfarming::events_v1::{ emit_unstake_position_event, emit_claim_reward_event, emit_distribute_reward_event, emit_new_reward_pool_created_event};
+use weissfarming::events_v2::{ emit_new_stake_position_event_v2 };
+
 use sui::coin::{Coin};
 use sui::display;
 use sui::package::{Publisher};
@@ -79,10 +81,14 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
 
         i = i + 1;
     };
+   
     // Emit new stake position
-    emit_new_stake_position_event(
+    emit_new_stake_position_event_v2(
         object::id(farm),
         wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val(),
+        position::liquidity(&position),
+        position::tick_lower_index(&position),
+        position::tick_upper_index(&position)
     );
   
     // Update farm total staked
