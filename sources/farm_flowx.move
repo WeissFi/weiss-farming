@@ -2,19 +2,17 @@ module weissfarming::farm_flowx;
 
 // === Imports ===
 use weissfarming::wf_decimal;
-use weissfarming::errors::{ENotAllowedPool, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, EInvalidPositionSource, ENoRewardsToClaim};
+use weissfarming::errors::{ENotAllowedPool, ERewardPoolAlreadyExist, ENotUpgrade, EUnauthorized, EUnclaimedRewards, EInvalidRewardPool, EPackageVersionError, EInvalidHolderPositionCap, ENoRewardsToClaim};
 use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
-use weissfarming::constants::{VERSION, FLOWX_V3_ADDRESS};
+use weissfarming::constants::{VERSION};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
-use weissfarming::events_v1::{ emit_distribute_reward_event, emit_new_reward_pool_created_event};
-use weissfarming::events_v2::{ emit_new_stake_position_event_v2_1, emit_unstake_position_event_v2, emit_claim_reward_event_v2 };
+use weissfarming::events_v1::{ emit_distribute_reward_event, emit_new_reward_pool_created_event, emit_new_stake_position_event, emit_unstake_position_event, emit_claim_reward_event };
 
 use sui::coin::{Coin};
 use sui::display;
 use sui::package::{Publisher};
 use sui::table::{Self, Table};
-use sui::address;
 
 use std::type_name::{Self, TypeName};
 
@@ -26,7 +24,7 @@ public struct RewardPoolInfo has store {
     token_type: TypeName,
     global_index: u256,
     pool_id: ID,
-    decimals: u8
+    decimals: u256
 }
 
 public struct Farm has key, store {
@@ -36,7 +34,6 @@ public struct Farm has key, store {
     allowed_pool_ids: vector<ID>,
     // tick_reward_tiers: vector<TickRewardTier>,
     reward_pools: vector<RewardPoolInfo>,
-    flowx_v3_address: address,
 }
 
 public struct UserRewardInfo has store, drop {
@@ -54,12 +51,6 @@ public struct HolderPositionCap has key, store {
 // === Public Functions ===
 entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut TxContext){
     assert!(farm.version == VERSION(), EPackageVersionError());
-    
-    // Verify the Position comes from FlowX v3 package
-    let position_type = type_name::get<Position>();
-    let address_string = position_type.get_address();
-    let position_addr = address::from_ascii_bytes(address_string.as_bytes());
-    assert!(position_addr == farm.flowx_v3_address, EInvalidPositionSource());
     
     // Assert position pool is allowed to stake
     let pool_id = position::pool_id(&position);
@@ -85,7 +76,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
     let balance_for_emit = wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val();
     let liquidity_for_emit = position::liquidity(&position);
     let tick_lower_index_for_emit = position::tick_lower_index(&position);
-    let tick_upper_index_for_emit = position::tick_lower_index(&position);
+    let tick_upper_index_for_emit = position::tick_upper_index(&position);
   
     // Update farm total staked
     farm.total_staked = wf_decimal::from_scaled_val(farm.total_staked).add(wf_decimal::from_q64(position::liquidity(&position))).to_scaled_val();
@@ -98,7 +89,7 @@ entry public fun stake_position(position: Position, farm: &mut Farm, ctx: &mut T
         position,
     };
       // Emit new stake position
-    emit_new_stake_position_event_v2_1(
+    emit_new_stake_position_event(
         object::id(&holder_position),
         object::id(farm),
         balance_for_emit,
@@ -141,7 +132,7 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
         i = i + 1;
     };
 
-    emit_unstake_position_event_v2(
+    emit_unstake_position_event(
         holder_position_cap_id,
         object::id(farm),
         wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val()
@@ -190,7 +181,7 @@ entry public fun claim_rewards<T>(holder_position_cap: &mut HolderPositionCap, r
 
             let reward_coin = reward_pool::intern_withdraw_balance<T>(rewards_to_u64, reward_pool);
             // Emit claim reward event
-            emit_claim_reward_event_v2(
+            emit_claim_reward_event(
                 holder_position_cap_id,
                 farm_id, 
                 reward_coin.value(),
@@ -253,7 +244,7 @@ entry public fun distribute_rewards<T>(coin: Coin<T>, reward_pool: &mut RewardPo
 
 
 // === Admin Functions ===
-entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, decimals: u8, ctx: &mut TxContext){
+entry public fun create_reward_pool<T>(admin_cap: &AdminCap, farm: &mut Farm, decimals: u256, ctx: &mut TxContext){
     assert!(farm.version == VERSION(), EPackageVersionError());
     assert!(admin_cap.get_farm_id() == object::id(farm), EUnauthorized());
 
@@ -342,7 +333,6 @@ fun init(ctx: &mut TxContext){
         allowed_pool_ids: vector::empty<ID>(),
         // tick_reward_tiers: vector::empty(),
         reward_pools: vector::empty(),
-        flowx_v3_address: FLOWX_V3_ADDRESS(),
     };
 
     let admin_cap = intern_new_farm_admin(object::id(&new_farm), ctx);
@@ -423,7 +413,6 @@ public fun init_package(scenario: &mut Scenario) {
         allowed_pool_ids: vector::empty<ID>(),
         // tick_reward_tiers: vector::empty(),
         reward_pools: vector::empty(),
-        flowx_v3_address: @flowx, // Use flowx stub address for testing
     };
 
     let admin_cap = intern_new_farm_admin(object::id(&new_farm), scenario.ctx());
@@ -434,7 +423,7 @@ public fun init_package(scenario: &mut Scenario) {
 }
 
 #[test_only]
-public fun init_create_reward_pool<T>(admin_cap: &mut AdminCap, farm: &mut Farm, decimals: u8, scenario: &mut Scenario){
+public fun init_create_reward_pool<T>(admin_cap: &mut AdminCap, farm: &mut Farm, decimals: u256, scenario: &mut Scenario){
     create_reward_pool<T>(admin_cap, farm, decimals, scenario.ctx());
 }
 
@@ -450,7 +439,7 @@ fun test_stake_position(){
     let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
     let mut farm = scenario.take_shared<Farm>();
     {        
-        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 100_000_000, &mut scenario);
         // Add dummy pool ID for testing  
         let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
         initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
@@ -463,7 +452,7 @@ fun test_stake_position(){
         stake_position(position, &mut farm,scenario.ctx());
         let reward_pool_info = vector::borrow(&farm.reward_pools, 0);
         
-        assert_eq!(reward_pool_info.decimals, 8u8);
+        assert_eq!(reward_pool_info.decimals, 100_000_000);
         assert_eq!(reward_pool_info.global_index, 0);
         assert_eq!(reward_pool_info.token_type, type_name::get<TEST_FLX>());
         
@@ -496,8 +485,8 @@ fun test_distribute_rewards(){
     let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
     let mut farm = scenario.take_shared<Farm>();
     {        
-        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
-        init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 9, &mut scenario);
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 100_000_000, &mut scenario);
+        init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 1_000_000_000, &mut scenario);
         // Add dummy pool ID for testing  
         let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
         initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
@@ -522,11 +511,11 @@ fun test_distribute_rewards(){
     {
         assert_eq!(reward_pool_flx.get_balance(),  1_000_000_000_000);
         assert_eq!(reward_pool_flx.get_farm_id(),  object::id(&farm));
-        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(1_000_000_000_000, 8).to_scaled_val());
+        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(1_000_000_000_000, 100_000_000).to_scaled_val());
 
         assert_eq!(reward_pool_sui.get_balance(),  10_000_000_000_000);
         assert_eq!(reward_pool_sui.get_farm_id(),  object::id(&farm));
-        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(10_000_000_000_000, 9).to_scaled_val());
+        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(10_000_000_000_000, 1_000_000_000).to_scaled_val());
     };
     
     transfer::public_share_object(farm);
@@ -547,8 +536,8 @@ fun test_claim_rewards(){
     let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
     let mut farm = scenario.take_shared<Farm>();
     {        
-        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
-        init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 9, &mut scenario);
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 100_000_000, &mut scenario);
+        init_create_reward_pool<SUI>(&mut admin_cap, &mut farm, 1_000_000_000, &mut scenario);
         // Add dummy pool ID for testing  
         let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
         initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
@@ -561,7 +550,7 @@ fun test_claim_rewards(){
         stake_position(position, &mut farm,scenario.ctx());
         let reward_pool_info = vector::borrow(&farm.reward_pools, 0);
         
-        assert_eq!(reward_pool_info.decimals, 8u8);
+        assert_eq!(reward_pool_info.decimals, 100_000_000);
         assert_eq!(reward_pool_info.global_index, 0);
         assert_eq!(reward_pool_info.token_type, type_name::get<TEST_FLX>());
         
@@ -592,11 +581,11 @@ fun test_claim_rewards(){
     {
         assert_eq!(reward_pool_flx.get_balance(),  1);
         assert_eq!(reward_pool_flx.get_farm_id(),  object::id(&farm));
-        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 8).to_scaled_val());
+        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 100_000_000).to_scaled_val());
 
         assert_eq!(reward_pool_sui.get_balance(),  10_000_000_000_000);
         assert_eq!(reward_pool_sui.get_farm_id(),  object::id(&farm));
-        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 9).to_scaled_val());
+        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 1_000_000_000).to_scaled_val());
     };
 
     scenario.next_tx(ALICE);
@@ -610,11 +599,11 @@ fun test_claim_rewards(){
     {
         assert_eq!(reward_pool_flx.get_balance(),  1);
         assert_eq!(reward_pool_flx.get_farm_id(),  object::id(&farm));
-        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 8).to_scaled_val());
+        assert_eq!(reward_pool_flx.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 100_000_000).to_scaled_val());
 
         assert_eq!(reward_pool_sui.get_balance(),  1);
         assert_eq!(reward_pool_sui.get_farm_id(),  object::id(&farm));
-        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 9).to_scaled_val());
+        assert_eq!(reward_pool_sui.get_yield_gain_pending(),  wf_decimal::from_native_token(0, 1_000_000_000).to_scaled_val());
     };
 
  
@@ -637,7 +626,7 @@ fun test_unstake_position(){
     let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
     let mut farm = scenario.take_shared<Farm>();
     {        
-        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 100_000_000, &mut scenario);
         // Add dummy pool ID for testing  
         let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
         initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);
@@ -676,7 +665,7 @@ fun fail_test_stake_position_tokens_type_not_match(){
     let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
     let mut farm = scenario.take_shared<Farm>();
     {        
-        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 100_000_000, &mut scenario);
         // Add wrong pool ID for testing (should fail)
         let wrong_pool_id = object::id_from_address(@0x1111);
         initialize_allowed_pool(&admin_cap, &mut farm, wrong_pool_id);
@@ -704,7 +693,7 @@ fun test_multiple_stakers_reward_distribution(){
     let mut admin_cap = scenario.take_from_address<AdminCap>(ADMIN);
     let mut farm = scenario.take_shared<Farm>();
     {        
-        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 8, &mut scenario);
+        init_create_reward_pool<TEST_FLX>(&mut admin_cap, &mut farm, 100_000_000, &mut scenario);
         // Add dummy pool ID for testing  
         let test_pool_id = object::id_from_address(@0xda208de7838d4922c3e0ced4e81ddbc94f3e4e6c2e3acf97194151dc1639424b);
         initialize_allowed_pool(&admin_cap, &mut farm, test_pool_id);

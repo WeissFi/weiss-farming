@@ -116,12 +116,12 @@ public fun reward_length(_arg0: &Position) : u64 {
     abort 0
 }
 
-public fun tick_lower_index(_arg0: &Position) : flowx::i32::I32 {
-    abort 0
+public fun tick_lower_index(arg0: &Position) : flowx::i32::I32 {
+    arg0.tick_lower_index
 }
 
-public fun tick_upper_index(_arg0: &Position) : flowx::i32::I32 {
-    abort 0
+public fun tick_upper_index(arg0: &Position) : flowx::i32::I32 {
+    arg0.tick_upper_index
 }
 
     
