@@ -135,7 +135,10 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
     emit_unstake_position_event(
         holder_position_cap_id,
         object::id(farm),
-        wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val()
+        wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val(),
+        position.liquidity(),
+        position.tick_lower_index(),
+        position.tick_upper_index()
     );
 
     // Update farm total staked (subtract the position's liquidity)
