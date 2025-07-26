@@ -31,6 +31,12 @@ public struct NewStakePositionEvent has copy, drop {
 public struct UnstakePositionEvent has copy, drop {
     holder_position_id: ID,
     farm_id: ID,
+    balance: u256
+}
+
+public struct UnstakePositionEventV1a has copy, drop {
+    holder_position_id: ID,
+    farm_id: ID,
     balance: u256,
     liquidity: u128,
     tick_lower_index: I32,
@@ -56,8 +62,16 @@ public fun emit_new_stake_position_event(holder_position_id: ID, farm_id: ID, ba
     });
 }
 
-public fun emit_unstake_position_event(holder_position_id: ID, farm_id: ID, balance: u256, liquidity: u128, tick_lower_index: I32, tick_upper_index: I32) {
+public fun emit_unstake_position_event(holder_position_id: ID, farm_id: ID, balance: u256) {
     event::emit(UnstakePositionEvent {
+        holder_position_id,
+        farm_id,
+        balance,
+    });
+}
+
+public fun emit_unstake_position_event_v1a(holder_position_id: ID, farm_id: ID, balance: u256, liquidity: u128, tick_lower_index: I32, tick_upper_index: I32) {
+    event::emit(UnstakePositionEventV1a {
         holder_position_id,
         farm_id,
         balance,
