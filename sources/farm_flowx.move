@@ -7,7 +7,7 @@ use weissfarming::reward_pool::{intern_create_reward_pool, RewardPool};
 use weissfarming::reward_pool;
 use weissfarming::constants::{VERSION};
 use weissfarming::farm_admin::{AdminCap, intern_new_farm_admin};
-use weissfarming::events_v1::{ emit_distribute_reward_event, emit_new_reward_pool_created_event, emit_new_stake_position_event, emit_unstake_position_event_v1a, emit_claim_reward_event };
+use weissfarming::events_v2::{ emit_distribute_reward_event, emit_new_reward_pool_created_event, emit_new_stake_position_event, emit_unstake_position_event, emit_claim_reward_event };
 
 use sui::coin::{Coin};
 use sui::display;
@@ -132,7 +132,7 @@ entry public fun unstake_position(holder_position_cap: HolderPositionCap, farm: 
         i = i + 1;
     };
 
-    emit_unstake_position_event_v1a(
+    emit_unstake_position_event(
         holder_position_cap_id,
         object::id(farm),
         wf_decimal::from_q64(position::liquidity(&position)).to_scaled_val(),
