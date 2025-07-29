@@ -11,7 +11,7 @@ flowx = { local = "deps/flowx_stub/flowx" }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
 
 [addresses]
-weissfarming = "0x0"
+weissfarming = "0xdabe0ee96a1f64e48d60d6a5a2418877b7c8f584b38fbdbb26c13849c7c497a1"
 flowx = "0x40aa5119ae0633e7ba3c80fe4fd3d9b5277300dead42f6f9e565e7dd589cf6cb"
 
 [dev-dependencies]
