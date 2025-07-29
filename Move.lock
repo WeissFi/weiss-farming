@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "CA5B099704B16137BCB67E161680092651CCF9BF9F99087D6456EACFF142B555"
+manifest_digest = "535F288135CDE62273FC1C27835D55930A012A0BEB3FAEE3566BE5AEF9C45E5E"
 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -23,7 +23,7 @@ dependencies = [
 
 [[move.package]]
 id = "flowx"
-source = { git = "https://github.com/WeissFi/weiss-farming.git", rev = "main", subdir = "deps/flowx_stub/flowx" }
+source = { local = "deps/flowx_stub/flowx" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -41,3 +41,9 @@ chain-id = "35834a8a"
 original-published-id = "0x9ec78ad67035029b202a08d25f72ade9c6ed6ca3abb0939fade3e895117d69a0"
 latest-published-id = "0xd448426819d4182e239fcfe4ce0b448572c004baa95090d3f4f7a146ce250835"
 published-version = "5"
+
+[env.testnet]
+chain-id = "4c78adac"
+original-published-id = "0xdabe0ee96a1f64e48d60d6a5a2418877b7c8f584b38fbdbb26c13849c7c497a1"
+latest-published-id = "0xdabe0ee96a1f64e48d60d6a5a2418877b7c8f584b38fbdbb26c13849c7c497a1"
+published-version = "1"

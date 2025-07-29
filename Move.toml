@@ -4,15 +4,15 @@ version = "0.0.1"
 edition = "2024.beta"
 license = "Proprietary"
 authors = ["@0xantman (contact@weiss.finance)"]
-published-at= "0xd448426819d4182e239fcfe4ce0b448572c004baa95090d3f4f7a146ce250835"
+
 
 [dependencies]
-flowx = { git = "https://github.com/WeissFi/weiss-farming.git", subdir = "deps/flowx_stub/flowx", rev = "main" }
+flowx = { local = "deps/flowx_stub/flowx" }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
 
 [addresses]
-weissfarming = "0x9ec78ad67035029b202a08d25f72ade9c6ed6ca3abb0939fade3e895117d69a0"
-flowx = "0x25929e7f29e0a30eb4e692952ba1b5b65a3a4d65ab5f2a32e1ba3edcb587f26d"
+weissfarming = "0x0"
+flowx = "0x40aa5119ae0633e7ba3c80fe4fd3d9b5277300dead42f6f9e565e7dd589cf6cb"
 
 [dev-dependencies]
 
