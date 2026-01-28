@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024.beta"
 license = "Proprietary"
 authors = ["@0xantman (contact@weiss.finance)"]
-
+published-at = "0xdabe0ee96a1f64e48d60d6a5a2418877b7c8f584b38fbdbb26c13849c7c497a1"
 
 [dependencies]
 flowx = { local = "deps/flowx_stub/flowx" }
